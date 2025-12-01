@@ -6,6 +6,9 @@ from typing import Annotated, Optional
 from fastapi import Cookie, Depends, FastAPI, Form, Header, HTTPException, Response, status
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from aiogram import Bot
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 
 from .config import Settings
 from .db import Database
@@ -20,6 +23,11 @@ def create_api(settings: Settings, database: Database) -> FastAPI:
 
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
     app.mount("/admin_panel/static", StaticFiles(directory=admin_panel_dir), name="admin_panel_static")
+
+    bot = Bot(
+        token=settings.bot_token,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
 
     def _session_secret() -> str:
         secret = settings.admin_panel_secret or settings.api_key
@@ -81,6 +89,75 @@ def create_api(settings: Settings, database: Database) -> FastAPI:
     async def actions(limit: int = 50, auth: None = Auth) -> dict:
         items = await database.list_actions(limit=limit)
         return {"items": items, "limit": limit}
+
+    @app.get("/questions")
+    async def questions(limit: int = 50, auth: None = Auth) -> dict:
+        items = await database.list_questions(limit=limit)
+        return {"items": items, "limit": limit}
+
+    @app.get("/reports")
+    async def reports(limit: int = 50, auth: None = Auth) -> dict:
+        items = await database.list_reports(limit=limit)
+        return {"items": items, "limit": limit}
+
+    @app.post("/questions/{question_id}/reply")
+    async def reply_question(question_id: int, message: str, auth: None = Auth) -> dict:
+        question = await database.get_question(question_id)
+        if not question:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
+        user_id = question.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No user_id to reply")
+        try:
+            await bot.send_message(chat_id=user_id, text=message)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Failed to send: {e}")
+        await database.add_action(
+            action="question_reply",
+            user_id=user_id,
+            username=question.get("username"),
+            details={"question_id": question_id, "message": message},
+        )
+        return {"status": "ok"}
+
+    @app.post("/reports/{report_id}/reply")
+    async def reply_report(report_id: int, message: str, auth: None = Auth) -> dict:
+        report = await database.get_report(report_id)
+        if not report:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
+        user_id = report.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No user_id to reply")
+        try:
+            await bot.send_message(chat_id=user_id, text=message)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Failed to send: {e}")
+        await database.add_action(
+            action="report_reply",
+            user_id=user_id,
+            username=report.get("username"),
+            details={"report_id": report_id, "message": message},
+        )
+        return {"status": "ok"}
+
+    @app.post("/broadcast")
+    async def broadcast(message: str, auth: None = Auth) -> dict:
+        ids = await database.list_all_user_ids()
+        sent = 0
+        failed = 0
+        for uid in ids:
+            try:
+                await bot.send_message(chat_id=uid, text=message)
+                sent += 1
+            except Exception:
+                failed += 1
+        await database.add_action(
+            action="broadcast",
+            user_id=None,
+            username=None,
+            details={"message": message, "sent": sent, "failed": failed},
+        )
+        return {"status": "ok", "sent": sent, "failed": failed, "total": len(ids)}
 
     @app.get("/admin/login", include_in_schema=False)
     async def login_page() -> FileResponse:

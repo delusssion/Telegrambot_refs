@@ -23,6 +23,12 @@ class SubmissionForm(StatesGroup):
     comment = State()
     evidence = State()
 
+class SupportForm(StatesGroup):
+    question = State()
+
+class ReportForm(StatesGroup):
+    report = State()
+
 
 def _is_admin(user_id: int, settings: Settings) -> bool:
     return user_id in (settings.admin_ids or [])
@@ -81,6 +87,37 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         ]
     )
 
+    start_report_keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✉️ Написать сообщение", callback_data="start_report_message")],
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_report")],
+        ]
+    )
+    start_support_keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✉️ Написать сообщение", callback_data="start_support")],
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_support")],
+        ]
+    )
+    after_send_keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🏠 В главное меню", callback_data="go_main"),
+                InlineKeyboardButton(text="📜 К заданиям", callback_data="menu_tasks"),
+            ]
+        ]
+    )
+    cancel_support_keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_support")]
+        ]
+    )
+    cancel_report_keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_report")]
+        ]
+    )
+
     def main_menu_inline() -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
             inline_keyboard=[
@@ -107,6 +144,31 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         resize_keyboard=True,
     )
 
+    async def clear_state_keep_age(state: FSMContext) -> None:
+        data = await state.get_data()
+        age = data.get("preferred_age")
+        await state.clear()
+        if age:
+            await state.update_data(preferred_age=age)
+
+    async def show_tasks_or_main(obj: Message | CallbackQuery, state: FSMContext) -> None:
+        data = await state.get_data()
+        preferred_age = data.get("preferred_age")
+        if preferred_age:
+            prompt = f"Доступные задания для {preferred_age}:"
+            kb = banks_inline_keyboard(preferred_age)
+            if isinstance(obj, CallbackQuery):
+                await obj.message.answer(prompt, reply_markup=kb)
+                await obj.answer()
+            else:
+                await obj.answer(prompt, reply_markup=kb)
+        else:
+            if isinstance(obj, CallbackQuery):
+                await obj.message.answer("Главное меню:", reply_markup=main_menu_reply)
+                await obj.answer()
+            else:
+                await obj.answer("Главное меню:", reply_markup=main_menu_reply)
+
     def age_inline_keyboard() -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
             inline_keyboard=[
@@ -118,19 +180,16 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
             ]
         )
 
-    def banks_inline_keyboard_14() -> InlineKeyboardMarkup:
-        rows = [[InlineKeyboardButton(text=btn, callback_data=f"bank::{btn}")] for btn in bank_14_buttons]
+    def banks_inline_keyboard(age_label: str) -> InlineKeyboardMarkup:
+        buttons = bank_14_buttons if age_label == "14+" else bank_18_buttons
+        other_age = "18+" if age_label == "14+" else "14+"
+        rows = [[InlineKeyboardButton(text=btn, callback_data=f"bank::{btn}")] for btn in buttons]
         rows.append([InlineKeyboardButton(text=emoji_button, callback_data="emoji")])
         rows.append([InlineKeyboardButton(text=other_tasks_button, callback_data="other_tasks")])
-        rows.append([InlineKeyboardButton(text=show_18_button, callback_data="show_18")])
+        if age_label == "14+":
+            rows.append([InlineKeyboardButton(text=show_18_button, callback_data="show_18")])
         rows.append([InlineKeyboardButton(text=ask_button, callback_data="ask")])
-        return InlineKeyboardMarkup(inline_keyboard=rows)
-
-    def banks_inline_keyboard_18() -> InlineKeyboardMarkup:
-        rows = [[InlineKeyboardButton(text=btn, callback_data=f"bank::{btn}")] for btn in bank_18_buttons]
-        rows.append([InlineKeyboardButton(text=emoji_button, callback_data="emoji")])
-        rows.append([InlineKeyboardButton(text=other_tasks_button, callback_data="other_tasks")])
-        rows.append([InlineKeyboardButton(text=ask_button, callback_data="ask")])
+        rows.append([InlineKeyboardButton(text=f"🔄 Показать задания {other_age}", callback_data=f"switch_age::{other_age}")])
         return InlineKeyboardMarkup(inline_keyboard=rows)
 
     def all_banks_inline_keyboard() -> InlineKeyboardMarkup:
@@ -157,7 +216,6 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
                 photo_sent = False
         if not photo_sent:
             await message.answer(start_text, reply_markup=next_keyboard)
-        # Убираем автоматический вывод главного меню, чтобы не спамить при /start
 
     @dp.message(CommandStart())
     async def handle_start(message: Message) -> None:
@@ -171,7 +229,7 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
 
     @dp.callback_query(F.data == "next_submit")
     async def handle_next(call, state: FSMContext):
-        await state.clear()
+        await clear_state_keep_age(state)
         await call.message.answer(
             "Выберите ваш возраст:",
             reply_markup=age_inline_keyboard(),
@@ -202,7 +260,25 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
             "👉Сделай шаг — и заработай.",
             reply_markup=actions_inline_keyboard,
         )
-        await state.clear()
+        await clear_state_keep_age(state)
+
+    async def _show_tasks(message_obj: Message | CallbackQuery, state: FSMContext) -> None:
+        data = await state.get_data()
+        preferred_age = data.get("preferred_age")
+        if preferred_age:
+            prompt = f"Доступные задания для {preferred_age}:"
+            kb = banks_inline_keyboard(preferred_age)
+            if isinstance(message_obj, CallbackQuery):
+                await message_obj.message.answer(prompt, reply_markup=kb)
+                await message_obj.answer()
+            else:
+                await message_obj.answer(prompt, reply_markup=kb)
+        else:
+            if isinstance(message_obj, CallbackQuery):
+                await message_obj.message.answer("Выберите ваш возраст:", reply_markup=age_inline_keyboard())
+                await message_obj.answer()
+            else:
+                await message_obj.answer("Выберите ваш возраст:", reply_markup=age_inline_keyboard())
 
     @dp.message(F.text == start_earn_button)
     async def handle_start_earn(message: Message, state: FSMContext) -> None:
@@ -212,8 +288,18 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
             username=message.from_user.username if message.from_user else None,
             details={},
         )
-        await state.clear()
-        await message.answer("Выберите ваш возраст:", reply_markup=age_inline_keyboard())
+        await state.set_state(None)
+        await _show_tasks(message, state)
+
+    async def handle_start_earn(message: Message, state: FSMContext) -> None:
+        await database.add_action(
+            action="start_earn",
+            user_id=message.from_user.id if message.from_user else None,
+            username=message.from_user.username if message.from_user else None,
+            details={},
+        )
+        await state.set_state(None)
+        await _show_tasks(message, state)
 
     @dp.callback_query(F.data == "start_earn")
     async def handle_start_earn_cb(call: CallbackQuery, state: FSMContext) -> None:
@@ -223,42 +309,56 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
             username=call.from_user.username if call.from_user else None,
             details={},
         )
-        await state.clear()
-        await call.message.answer("Выберите ваш возраст:", reply_markup=age_inline_keyboard())
-        await call.answer()
+        await state.set_state(None)
+        await _show_tasks(call, state)
+
+    def _get_user_obj(obj: Message | CallbackQuery):
+        if isinstance(obj, CallbackQuery):
+            return obj.from_user
+        if isinstance(obj, Message):
+            return obj.from_user
+        return None
+
+    async def _store_age_and_show(age_label: str, message_obj: Message | CallbackQuery, state: FSMContext) -> None:
+        data = await state.get_data()
+        data["preferred_age"] = age_label
+        await state.set_state(None)
+        await state.set_data(data)
+        u = _get_user_obj(message_obj)
+        await database.add_action(
+            action="age_selected",
+            user_id=u.id if u else None,
+            username=u.username if u else None,
+            details={"age": age_label},
+        )
+        kb = banks_inline_keyboard(age_label)
+        prompt = "Доступные задания для 14+:" if age_label == "14+" else "Доступные задания для 18+:"
+        if isinstance(message_obj, CallbackQuery):
+            await message_obj.message.answer(prompt, reply_markup=kb)
+            await message_obj.answer()
+        else:
+            await message_obj.answer(prompt, reply_markup=kb)
 
     @dp.message(F.text == age_14_button)
     async def handle_age_14(message: Message, state: FSMContext) -> None:
-        await database.add_action(
-            action="age_selected",
-            user_id=message.from_user.id if message.from_user else None,
-            username=message.from_user.username if message.from_user else None,
-            details={"age": "14+"},
-        )
-        await state.clear()
-        await message.answer("Доступные задания для 14+:", reply_markup=banks_inline_keyboard_14())
+        await _store_age_and_show("14+", message, state)
 
     @dp.message(F.text == age_18_button)
     async def handle_age_18(message: Message, state: FSMContext) -> None:
-        await database.add_action(
-            action="age_selected",
-            user_id=message.from_user.id if message.from_user else None,
-            username=message.from_user.username if message.from_user else None,
-            details={"age": "18+"},
-        )
-        await state.clear()
-        await message.answer("Доступные задания для 18+:", reply_markup=banks_inline_keyboard_18())
+        await _store_age_and_show("18+", message, state)
 
     @dp.message(F.text == ask_button)
-    async def handle_question(message: Message) -> None:
+    async def handle_question(message: Message, state: FSMContext) -> None:
         await database.add_action(
-            action="ask_question",
+            action="ask_question_start",
             user_id=message.from_user.id if message.from_user else None,
             username=message.from_user.username if message.from_user else None,
             details={},
         )
+        await state.set_state(SupportForm.question)
         await message.answer(
-            "Напиши свой вопрос, и мы ответим. Если хочешь быстрее — отправь контакт или опиши задачу подробнее."
+            "Напиши свой вопрос или отправь файл/скрин. После отправки вопрос будет сохранен для админов.",
+            reply_markup=cancel_support_keyboard,
         )
 
     @dp.message(F.text.in_(bank_14_buttons + bank_18_buttons))
@@ -289,37 +389,20 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         await message.answer("Скоро добавим новые задания. Пока выбери из доступных или задай вопрос.")
 
     @dp.message(F.text == show_18_button)
-    async def handle_show_18(message: Message) -> None:
-        await message.answer("Доступные задания 18+:", reply_markup=banks_inline_keyboard_18())
+    async def handle_show_18(message: Message, state: FSMContext) -> None:
+        await _store_age_and_show("18+", message, state)
 
     @dp.message(F.text == tasks_button)
     async def handle_tasks_menu(message: Message, state: FSMContext) -> None:
-        await state.clear()
-        await message.answer("Выберите ваш возраст:", reply_markup=age_inline_keyboard())
+        await _show_tasks(message, state)
 
     @dp.callback_query(F.data == "age_14")
     async def handle_age_14_cb(call: CallbackQuery, state: FSMContext) -> None:
-        await database.add_action(
-            action="age_selected",
-            user_id=call.from_user.id if call.from_user else None,
-            username=call.from_user.username if call.from_user else None,
-            details={"age": "14+"},
-        )
-        await state.clear()
-        await call.message.answer("Доступные задания для 14+:", reply_markup=banks_inline_keyboard_14())
-        await call.answer()
+        await _store_age_and_show("14+", call, state)
 
     @dp.callback_query(F.data == "age_18")
     async def handle_age_18_cb(call: CallbackQuery, state: FSMContext) -> None:
-        await database.add_action(
-            action="age_selected",
-            user_id=call.from_user.id if call.from_user else None,
-            username=call.from_user.username if call.from_user else None,
-            details={"age": "18+"},
-        )
-        await state.clear()
-        await call.message.answer("Доступные задания для 18+:", reply_markup=banks_inline_keyboard_18())
-        await call.answer()
+        await _store_age_and_show("18+", call, state)
 
     @dp.callback_query(F.data.startswith("bank::"))
     async def handle_bank_cb(call: CallbackQuery, state: FSMContext) -> None:
@@ -334,6 +417,11 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         )
         await call.message.answer("Добавь комментарий или условия (можно пропустить, отправив '-'):")
         await call.answer()
+
+    @dp.callback_query(F.data.startswith("switch_age::"))
+    async def handle_switch_age(call: CallbackQuery, state: FSMContext) -> None:
+        _, target_age = call.data.split("::", 1)
+        await _store_age_and_show(target_age, call, state)
 
     @dp.callback_query(F.data == "emoji")
     async def handle_emoji_cb(call: CallbackQuery) -> None:
@@ -352,20 +440,48 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         await call.answer()
 
     @dp.callback_query(F.data == "show_18")
-    async def handle_show_18_cb(call: CallbackQuery) -> None:
-        await call.message.answer("Доступные задания 18+:", reply_markup=banks_inline_keyboard_18())
-        await call.answer()
+    async def handle_show_18_cb(call: CallbackQuery, state: FSMContext) -> None:
+        await _store_age_and_show("18+", call, state)
 
     @dp.callback_query(F.data == "ask")
-    async def handle_ask_cb(call: CallbackQuery) -> None:
+    async def handle_ask_cb(call: CallbackQuery, state: FSMContext) -> None:
         await database.add_action(
-            action="ask_question",
+            action="ask_question_start",
             user_id=call.from_user.id if call.from_user else None,
             username=call.from_user.username if call.from_user else None,
             details={},
         )
-        await call.message.answer("Напиши свой вопрос, и мы ответим. Можно приложить скрин/файл.")
+        await state.set_state(SupportForm.question)
+        await call.message.answer("Напиши свой вопрос или отправь файл/скрин. После отправки вопрос будет сохранен для админов.", reply_markup=cancel_support_keyboard)
         await call.answer()
+
+    @dp.callback_query(F.data == "start_support")
+    async def handle_start_support(call: CallbackQuery, state: FSMContext) -> None:
+        await state.set_state(SupportForm.question)
+        await call.message.answer("Напиши свой вопрос или отправь файл/скрин. Можно отменить кнопкой ниже.", reply_markup=cancel_support_keyboard)
+        await call.answer()
+
+    @dp.callback_query(F.data == "start_report_message")
+    async def handle_start_report_message(call: CallbackQuery, state: FSMContext) -> None:
+        await state.set_state(ReportForm.report)
+        await call.message.answer("Опиши получение карты или отправь скрин. Можно отменить кнопкой ниже.", reply_markup=cancel_report_keyboard)
+        await call.answer()
+
+    @dp.callback_query(F.data == "go_main")
+    async def handle_go_main(call: CallbackQuery, state: FSMContext) -> None:
+        await clear_state_keep_age(state)
+        await call.message.answer("Главное меню:", reply_markup=main_menu_reply)
+        await call.answer()
+
+    @dp.callback_query(F.data == "cancel_support")
+    async def handle_cancel_support(call: CallbackQuery, state: FSMContext) -> None:
+        await clear_state_keep_age(state)
+        await show_tasks_or_main(call, state)
+
+    @dp.callback_query(F.data == "cancel_report")
+    async def handle_cancel_report(call: CallbackQuery, state: FSMContext) -> None:
+        await clear_state_keep_age(state)
+        await show_tasks_or_main(call, state)
 
     def _profile_text(obj: Message | CallbackQuery) -> str:
         u = obj.from_user if isinstance(obj, CallbackQuery) else obj.from_user
@@ -380,7 +496,10 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
 
     @dp.callback_query(F.data == "menu_profile")
     async def handle_profile_cb(call: CallbackQuery) -> None:
-        await call.message.answer(_profile_text(call), reply_markup=main_menu_inline())
+        back_kb = InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="go_main")]]
+        )
+        await call.message.answer(_profile_text(call), reply_markup=back_kb)
         await call.answer()
 
     @dp.callback_query(F.data == "menu_referral")
@@ -391,16 +510,22 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
             username=call.from_user.username if call.from_user else None,
             details={},
         )
+        back_kb = InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="go_main")]]
+        )
         await call.message.answer(
             "Реферальная программа: приглашай друзей, они оформляют задания — получаешь % от их вознаграждения. "
             "Скоро добавим персональные ссылки и учет начислений.",
-            reply_markup=main_menu_inline(),
+            reply_markup=back_kb,
         )
         await call.answer()
 
     @dp.message(F.text == profile_button)
     async def handle_profile_msg(message: Message) -> None:
-        await message.answer(_profile_text(message), reply_markup=main_menu_inline())
+        back_kb = InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="go_main")]]
+        )
+        await message.answer(_profile_text(message), reply_markup=back_kb)
 
     @dp.message(F.text == referral_button)
     async def handle_referral_msg(message: Message) -> None:
@@ -410,83 +535,107 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
             username=message.from_user.username if message.from_user else None,
             details={},
         )
+        back_kb = InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="go_main")]]
+        )
         await message.answer(
             "Реферальная программа: приглашай друзей, они оформляют задания — получаешь % от их вознаграждения. "
             "Скоро добавим персональные ссылки и учет начислений.",
-            reply_markup=main_menu_inline(),
+            reply_markup=back_kb,
         )
 
     @dp.message(F.text == support_button)
-    async def handle_support_msg(message: Message) -> None:
+    async def handle_support_msg(message: Message, state: FSMContext) -> None:
         await database.add_action(
             action="support_open",
             user_id=message.from_user.id if message.from_user else None,
             username=message.from_user.username if message.from_user else None,
             details={},
         )
-        await message.answer("Опиши проблему или вопрос — мы ответим. Можно приложить скрин/файл.", reply_markup=main_menu_inline())
+        await clear_state_keep_age(state)
+        await message.answer(
+            "Техподдержка. Нажми «✉️ Написать сообщение», затем отправь текст или файл. Можно отменить.",
+            reply_markup=start_support_keyboard,
+        )
 
     @dp.message(F.text == report_card_button)
-    async def handle_report_card_msg(message: Message) -> None:
+    async def handle_report_card_msg(message: Message, state: FSMContext) -> None:
         await database.add_action(
             action="report_card",
             user_id=message.from_user.id if message.from_user else None,
             username=message.from_user.username if message.from_user else None,
             details={},
         )
+        await clear_state_keep_age(state)
         await message.answer(
-            "Напиши, какую карту получил, и приложи скрин/фото (можно сразу в одном сообщении).",
-            reply_markup=main_menu_inline(),
+            "Сообщи о получении карты. Нажми «✉️ Написать сообщение», затем отправь текст или скрин.",
+            reply_markup=start_report_keyboard,
         )
 
     @dp.message(F.text == tasks_button)
     async def handle_tasks_msg(message: Message, state: FSMContext) -> None:
-        await state.clear()
-        await message.answer("Выберите ваш возраст:", reply_markup=age_inline_keyboard())
+        await _show_tasks(message, state)
 
     @dp.message(F.text == reviews_button)
     async def handle_reviews_msg(message: Message) -> None:
+        back_kb = InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="go_main")]]
+        )
         await message.answer(
             "⭐ Отзывы: скоро добавим витрину отзывов. Пока можешь написать вопрос в поддержку.",
-            reply_markup=main_menu_inline(),
+            reply_markup=back_kb,
         )
 
     @dp.callback_query(F.data == "menu_support")
-    async def handle_support_cb(call: CallbackQuery) -> None:
+    async def handle_support_cb(call: CallbackQuery, state: FSMContext) -> None:
         await database.add_action(
             action="support_open",
             user_id=call.from_user.id if call.from_user else None,
             username=call.from_user.username if call.from_user else None,
             details={},
         )
-        await call.message.answer("Опиши проблему или вопрос — мы ответим. Можно приложить скрин/файл.", reply_markup=main_menu_inline())
+        await clear_state_keep_age(state)
+        await call.message.answer(
+            "Техподдержка. Нажми «✉️ Написать сообщение», затем отправь текст или файл.",
+            reply_markup=start_support_keyboard,
+        )
         await call.answer()
 
     @dp.callback_query(F.data == "menu_report_card")
-    async def handle_report_card_cb(call: CallbackQuery) -> None:
+    async def handle_report_card_cb(call: CallbackQuery, state: FSMContext) -> None:
         await database.add_action(
             action="report_card",
             user_id=call.from_user.id if call.from_user else None,
             username=call.from_user.username if call.from_user else None,
             details={},
         )
+        await clear_state_keep_age(state)
         await call.message.answer(
-            "Напиши, какую карту получил, и приложи скрин/фото (можно сразу в одном сообщении).",
-            reply_markup=main_menu_inline(),
+            "Сообщи о получении карты. Нажми «✉️ Написать сообщение», затем отправь текст или скрин.",
+            reply_markup=start_report_keyboard,
         )
         await call.answer()
 
     @dp.callback_query(F.data == "menu_tasks")
     async def handle_tasks_cb(call: CallbackQuery, state: FSMContext) -> None:
-        await state.clear()
-        await call.message.answer("Выберите ваш возраст:", reply_markup=age_inline_keyboard())
+        data = await state.get_data()
+        preferred_age = data.get("preferred_age")
+        if preferred_age:
+            await call.message.answer(
+                f"Доступные задания для {preferred_age}:", reply_markup=banks_inline_keyboard(preferred_age)
+            )
+        else:
+            await call.message.answer("Выберите ваш возраст:", reply_markup=age_inline_keyboard())
         await call.answer()
 
     @dp.callback_query(F.data == "menu_reviews")
     async def handle_reviews_cb(call: CallbackQuery) -> None:
+        back_kb = InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="go_main")]]
+        )
         await call.message.answer(
             "⭐ Отзывы: скоро добавим витрину отзывов. Пока можешь написать вопрос в поддержку.",
-            reply_markup=main_menu_inline(),
+            reply_markup=back_kb,
         )
         await call.answer()
 
@@ -547,11 +696,106 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
             username=message.from_user.username if message.from_user else None,
             details={"submission_id": submission_id, "bank": bank},
         )
-        await state.clear()
+        await clear_state_keep_age(state)
         await message.answer(
             "Заявка отправлена! Мы свяжемся с тобой после проверки.\n"
             "Посмотреть последние заявки: /my"
         )
+
+    # Support/question flow
+    @dp.message(SupportForm.question, F.text | F.photo | F.document)
+    async def handle_support_question(message: Message, state: FSMContext) -> None:
+        file_id: Optional[str] = None
+        text = None
+        if message.photo:
+            file_id = message.photo[-1].file_id
+            text = message.caption
+        elif message.document:
+            file_id = message.document.file_id
+            text = message.caption
+        else:
+            text = message.text
+
+        if not text and not file_id:
+            await message.answer("Отправь текст или прикрепи файл/фото.")
+            return
+
+        await database.add_question(
+            user_id=message.from_user.id if message.from_user else None,
+            username=message.from_user.username if message.from_user else None,
+            message=text or "",
+            file_id=file_id,
+        )
+        await database.add_action(
+            action="question_submitted",
+            user_id=message.from_user.id if message.from_user else None,
+            username=message.from_user.username if message.from_user else None,
+            details={"file_id": file_id},
+        )
+        await clear_state_keep_age(state)
+        await message.answer("Вопрос сохранен, админ скоро ответит.", reply_markup=after_send_keyboard)
+
+    # Report flow
+    @dp.message(F.text == report_card_button)
+    async def handle_report_card_msg(message: Message, state: FSMContext) -> None:
+        await database.add_action(
+            action="report_card",
+            user_id=message.from_user.id if message.from_user else None,
+            username=message.from_user.username if message.from_user else None,
+            details={},
+        )
+        await clear_state_keep_age(state)
+        await message.answer(
+            "Сообщи о получении карты. Нажми «✉️ Написать сообщение», затем отправь текст или скрин.",
+            reply_markup=start_report_keyboard,
+        )
+
+    @dp.callback_query(F.data == "menu_report_card")
+    async def handle_report_card_cb(call: CallbackQuery, state: FSMContext) -> None:
+        await database.add_action(
+            action="report_card",
+            user_id=call.from_user.id if call.from_user else None,
+            username=call.from_user.username if call.from_user else None,
+            details={},
+        )
+        await clear_state_keep_age(state)
+        await call.message.answer(
+            "Сообщи о получении карты. Нажми «✉️ Написать сообщение», затем отправь текст или скрин.",
+            reply_markup=start_report_keyboard,
+        )
+        await call.answer()
+
+    @dp.message(ReportForm.report, F.text | F.photo | F.document)
+    async def handle_report_payload(message: Message, state: FSMContext) -> None:
+        file_id: Optional[str] = None
+        text = None
+        if message.photo:
+            file_id = message.photo[-1].file_id
+            text = message.caption
+        elif message.document:
+            file_id = message.document.file_id
+            text = message.caption
+        else:
+            text = message.text
+
+        if not text and not file_id:
+            await message.answer("Отправь текст или прикрепи файл/фото.")
+            return
+
+        await database.add_report(
+            user_id=message.from_user.id if message.from_user else None,
+            username=message.from_user.username if message.from_user else None,
+            message=text or "",
+            file_id=file_id,
+        )
+        await database.add_action(
+            action="report_submitted",
+            user_id=message.from_user.id if message.from_user else None,
+            username=message.from_user.username if message.from_user else None,
+            details={"file_id": file_id},
+        )
+        await clear_state_keep_age(state)
+        await message.answer("Отчет принят, спасибо! Админ проверит и свяжется.", reply_markup=after_send_keyboard)
 
     @dp.message(Command("my"))
     async def handle_my(message: Message) -> None:

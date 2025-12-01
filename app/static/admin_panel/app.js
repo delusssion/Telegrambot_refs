@@ -169,6 +169,64 @@ function renderPanel() {
         <div id="actions-status" class="muted"></div>
         <ul id="actions-list" class="logs"></ul>
       </div>
+
+      <div class="panel-block">
+        <div class="panel-header">
+          <h3>Вопросы пользователей</h3>
+          <button class="secondary" id="load-questions">Обновить</button>
+        </div>
+        <div id="questions-status" class="muted"></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Пользователь</th>
+                <th>Сообщение</th>
+                <th>Файл</th>
+                <th>Время</th>
+                <th>Ответ</th>
+              </tr>
+            </thead>
+            <tbody id="questions-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel-block">
+        <div class="panel-header">
+          <h3>Отчеты (карты)</h3>
+          <button class="secondary" id="load-reports">Обновить</button>
+        </div>
+        <div id="reports-status" class="muted"></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Пользователь</th>
+                <th>Текст</th>
+                <th>Файл</th>
+                <th>Время</th>
+                <th>Ответ</th>
+              </tr>
+            </thead>
+            <tbody id="reports-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel-block">
+        <div class="panel-header">
+          <h3>Рассылка всем пользователям</h3>
+        </div>
+        <div id="broadcast-status" class="muted"></div>
+        <form id="broadcast-form">
+          <label for="broadcast-message">Текст рассылки</label>
+          <textarea id="broadcast-message" rows="3" placeholder="Введите текст"></textarea>
+          <button type="submit">Отправить</button>
+        </form>
+      </div>
     </section>
   `;
 
@@ -193,9 +251,14 @@ function renderPanel() {
 
   document.getElementById("load-subs").addEventListener("click", loadSubmissions);
   document.getElementById("load-actions").addEventListener("click", loadActions);
+  document.getElementById("load-questions").addEventListener("click", loadQuestions);
+  document.getElementById("load-reports").addEventListener("click", loadReports);
+  document.getElementById("broadcast-form").addEventListener("submit", handleBroadcast);
 
   loadSubmissions();
   loadActions();
+  loadQuestions();
+  loadReports();
 }
 
 async function loadSubmissions() {
@@ -238,6 +301,112 @@ async function loadActions() {
     });
   } catch (err) {
     status.textContent = err.message;
+  }
+}
+
+async function loadQuestions() {
+  const status = document.getElementById("questions-status");
+  const body = document.getElementById("questions-body");
+  status.textContent = "Загружаю...";
+  body.innerHTML = "";
+  try {
+    const data = await apiFetch(`/questions?limit=${state.limit}`);
+    status.textContent = `Вопросов: ${data.items.length}`;
+    data.items.forEach((item) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${item.id}</td>
+        <td>${item.username || item.user_id || "—"}</td>
+        <td>${item.message || "—"}</td>
+        <td>${item.file_id || "—"}</td>
+        <td>${item.created_at}</td>
+        <td><button data-id="${item.id}" class="secondary reply-question">Ответить</button></td>
+      `;
+      body.appendChild(tr);
+    });
+    body.querySelectorAll(".reply-question").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        const id = e.target.dataset.id;
+        const text = prompt("Введите ответ пользователю:");
+        if (!text) return;
+        try {
+          await apiFetch(`/questions/${id}/reply`, {
+            method: "POST",
+            body: JSON.stringify({ message: text }),
+          });
+          showMessage("Ответ отправлен.");
+        } catch (err) {
+          showMessage(err.message);
+        }
+      });
+    });
+  } catch (err) {
+    status.textContent = err.message;
+  }
+}
+
+async function loadReports() {
+  const status = document.getElementById("reports-status");
+  const body = document.getElementById("reports-body");
+  status.textContent = "Загружаю...";
+  body.innerHTML = "";
+  try {
+    const data = await apiFetch(`/reports?limit=${state.limit}`);
+    status.textContent = `Отчетов: ${data.items.length}`;
+    data.items.forEach((item) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${item.id}</td>
+        <td>${item.username || item.user_id || "—"}</td>
+        <td>${item.message || "—"}</td>
+        <td>${item.file_id || "—"}</td>
+        <td>${item.created_at}</td>
+        <td><button data-id="${item.id}" class="secondary reply-report">Ответить</button></td>
+      `;
+      body.appendChild(tr);
+    });
+    body.querySelectorAll(".reply-report").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        const id = e.target.dataset.id;
+        const text = prompt("Введите ответ по отчету:");
+        if (!text) return;
+        try {
+          await apiFetch(`/reports/${id}/reply`, {
+            method: "POST",
+            body: JSON.stringify({ message: text }),
+          });
+          showMessage("Ответ отправлен.");
+        } catch (err) {
+          showMessage(err.message);
+        }
+      });
+    });
+  } catch (err) {
+    status.textContent = err.message;
+  }
+}
+
+async function handleBroadcast(event) {
+  event.preventDefault();
+  const textarea = document.getElementById("broadcast-message");
+  const status = document.getElementById("broadcast-status");
+  const text = textarea.value.trim();
+  if (!text) {
+    showMessage("Введите текст рассылки.");
+    return;
+  }
+  status.textContent = "Отправляю...";
+  try {
+    const data = await apiFetch("/broadcast", {
+      method: "POST",
+      body: JSON.stringify({ message: text }),
+    });
+    status.textContent = `Отправлено: ${data.sent}, ошибок: ${data.failed}`;
+    showMessage("Рассылка завершена.");
+    textarea.value = "";
+  } catch (err) {
+    status.textContent = err.message;
+    showMessage(err.message);
   }
 }
 

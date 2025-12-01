@@ -39,6 +39,24 @@ class Database:
                     details TEXT,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 );
+
+                CREATE TABLE IF NOT EXISTS questions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    username TEXT,
+                    message TEXT,
+                    file_id TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS reports (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    username TEXT,
+                    message TEXT,
+                    file_id TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                );
                 """
             )
             await db.commit()
@@ -142,5 +160,171 @@ class Database:
                 }
                 for row in rows
             ]
+        finally:
+            await db.close()
+
+    async def add_question(
+        self,
+        user_id: int | None,
+        username: str | None,
+        message: str,
+        file_id: str | None = None,
+    ) -> int:
+        db = await self.connect()
+        try:
+            cursor = await db.execute(
+                """
+                INSERT INTO questions (user_id, username, message, file_id)
+                VALUES (?, ?, ?, ?)
+                """,
+                (user_id, username, message, file_id),
+            )
+            await db.commit()
+            return cursor.lastrowid
+        finally:
+            await db.close()
+
+    async def get_question(self, question_id: int) -> Dict[str, Any] | None:
+        db = await self.connect()
+        try:
+            cursor = await db.execute(
+                """
+                SELECT id, user_id, username, message, file_id, created_at
+                FROM questions WHERE id = ?
+                """,
+                (question_id,),
+            )
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            return {
+                "id": row[0],
+                "user_id": row[1],
+                "username": row[2],
+                "message": row[3],
+                "file_id": row[4],
+                "created_at": row[5],
+            }
+        finally:
+            await db.close()
+
+    async def list_questions(self, limit: int = 50) -> List[Dict[str, Any]]:
+        db = await self.connect()
+        try:
+            cursor = await db.execute(
+                """
+                SELECT id, user_id, username, message, file_id, created_at
+                FROM questions
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            )
+            rows = await cursor.fetchall()
+            return [
+                {
+                    "id": row[0],
+                    "user_id": row[1],
+                    "username": row[2],
+                    "message": row[3],
+                    "file_id": row[4],
+                    "created_at": row[5],
+                }
+                for row in rows
+            ]
+        finally:
+            await db.close()
+
+    async def add_report(
+        self,
+        user_id: int | None,
+        username: str | None,
+        message: str | None,
+        file_id: str | None = None,
+    ) -> int:
+        db = await self.connect()
+        try:
+            cursor = await db.execute(
+                """
+                INSERT INTO reports (user_id, username, message, file_id)
+                VALUES (?, ?, ?, ?)
+                """,
+                (user_id, username, message, file_id),
+            )
+            await db.commit()
+            return cursor.lastrowid
+        finally:
+            await db.close()
+
+    async def get_report(self, report_id: int) -> Dict[str, Any] | None:
+        db = await self.connect()
+        try:
+            cursor = await db.execute(
+                """
+                SELECT id, user_id, username, message, file_id, created_at
+                FROM reports WHERE id = ?
+                """,
+                (report_id,),
+            )
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            return {
+                "id": row[0],
+                "user_id": row[1],
+                "username": row[2],
+                "message": row[3],
+                "file_id": row[4],
+                "created_at": row[5],
+            }
+        finally:
+            await db.close()
+
+    async def list_reports(self, limit: int = 50) -> List[Dict[str, Any]]:
+        db = await self.connect()
+        try:
+            cursor = await db.execute(
+                """
+                SELECT id, user_id, username, message, file_id, created_at
+                FROM reports
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            )
+            rows = await cursor.fetchall()
+            return [
+                {
+                    "id": row[0],
+                    "user_id": row[1],
+                    "username": row[2],
+                    "message": row[3],
+                    "file_id": row[4],
+                    "created_at": row[5],
+                }
+                for row in rows
+            ]
+        finally:
+            await db.close()
+
+    async def list_all_user_ids(self) -> List[int]:
+        db = await self.connect()
+        try:
+            cursor = await db.execute(
+                """
+                SELECT DISTINCT user_id FROM (
+                    SELECT user_id FROM submissions
+                    UNION ALL
+                    SELECT user_id FROM actions
+                    UNION ALL
+                    SELECT user_id FROM questions
+                    UNION ALL
+                    SELECT user_id FROM reports
+                )
+                WHERE user_id IS NOT NULL
+                """
+            )
+            rows = await cursor.fetchall()
+            return [row[0] for row in rows if row[0] is not None]
         finally:
             await db.close()
