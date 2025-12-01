@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ReferralBot · Админ панель</title>
+    <link rel="stylesheet" href="/admin_panel/static/styles.css">
+</head>
+<body>
+    <div class="app">
+        <header>
+            <h1>ReferralBot · Админка</h1>
+        </header>
+        <main id="root">
+            <section class="card">
+                <h2>Вход для администраторов</h2>
+                <p>Введите Telegram ID (логин) и пароль из конфигурации бота.</p>
+                <form id="login-form">
+                    <label for="admin-id">Telegram ID</label>
+                    <input type="text" id="admin-id" placeholder="Например, 12345678" inputmode="numeric" pattern="\\d*" required>
+
+                    <label for="password">Пароль</label>
+                    <div class="password-input">
+                        <input type="password" id="password" placeholder="Введите пароль" required>
+                        <button type="button" class="password-toggle" data-target="password">Показать</button>
+                    </div>
+                    <button type="submit">Войти</button>
+                </form>
+                <p class="hint">Пароль и логин берутся из переменных окружения <code>ADMIN_USER_ID</code> и <code>ADMIN_PASSWORD</code>. Авторизация ставит cookie-сессию.</p>
+            </section>
+        </main>
+        <footer>
+            <p>ReferralBot © <span id="year"></span></p>
+        </footer>
+    </div>
+    <script src="/admin_panel/static/app.js"></script>
+</body>
+</html>

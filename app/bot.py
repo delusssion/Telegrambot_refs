@@ -1,0 +1,589 @@
+from typing import Optional
+
+from aiogram import Bot, Dispatcher, F
+from aiogram.filters import Command, CommandStart
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import (
+    Message,
+    InputFile,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    CallbackQuery,
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+)
+
+from .config import Settings
+from .db import Database
+
+
+class SubmissionForm(StatesGroup):
+    bank = State()
+    comment = State()
+    evidence = State()
+
+
+def _is_admin(user_id: int, settings: Settings) -> bool:
+    return user_id in (settings.admin_ids or [])
+
+
+def setup_bot(settings: Settings, database: Database) -> Dispatcher:
+    dp = Dispatcher()
+
+    start_text = (
+        "💰 Заработай до 84 570₽ — просто выполняя задания. Без вложений. Оплата сразу в день выполнения.\n\n"
+        "Банки платят нам, чтобы ты оформил карту или другой продукт по их реферальной программе\n\n"
+        "💸Ты — оформляешь. Мы — получаем. Сразу делимся с тобой.\n\n"
+        " • ✅ Карты продавать не надо\n"
+        " • ✅ Мы не берем никакие данные\n"
+        " • ✅ Выплаты сразу — в тот же день\n"
+        " • ✅ Без вложений\n"
+        " • ✅ 2000+ успешных выплат\n"
+        " • ✅ Работаем уже 2 года\n\n"
+        "🔻 Нажми «➡Далее» и забери своё первое задание прямо сейчас."
+    )
+
+    next_button_text = "➡ Далее"
+    start_earn_button = "💰 Приступить к заработку"
+    ask_button = "❓ Задать вопрос"
+    profile_button = "👤 Профиль"
+    tasks_button = "📜 Задания"
+    report_card_button = "✔️ Получил карту"
+    referral_button = "🤝 Реферальная программа"
+    support_button = "🆘 Тех. поддержка"
+    reviews_button = "⭐ Отзывы"
+    age_14_button = "🧒 14+"
+    age_18_button = "🔞 18+"
+    other_tasks_button = "➕ Остальные задания"
+    show_18_button = "🔞 Отобразить карты 18+"
+    emoji_button = "😊"
+    bank_14_buttons = ["💳 Карта ВТБ 5ОО Р", "💳 Карта Т-Банк 5ОО Р", "💳 Карта Озон 3ОО Р"]
+    bank_18_buttons = [
+        "💳 Карта Газпром 1ООО Р",
+        "💳 Карта ВТБ 5ОО Р",
+        "💳 Карта ПСБ 5ОО Р",
+        "💳 Карта ОТП 5ОО Р",
+        "💳 Карта УБРИР 5ОО Р",
+        "💳 Карта УРАЛСИБ 5ОО Р",
+        "💳 Карта Т-Банк 5ОО Р",
+        "💳 Карта Озон 3ОО Р",
+        "💳 Карта МТС 3ОО Р",
+        "💳 Карта Альфа Банк 5ОО Р",
+    ]
+    next_keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text=next_button_text, callback_data="next_submit")]]
+    )
+    actions_inline_keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=start_earn_button, callback_data="start_earn")],
+            [InlineKeyboardButton(text=ask_button, callback_data="ask")],
+        ]
+    )
+
+    def main_menu_inline() -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text=profile_button, callback_data="menu_profile"),
+                    InlineKeyboardButton(text=tasks_button, callback_data="menu_tasks"),
+                ],
+                [InlineKeyboardButton(text=report_card_button, callback_data="menu_report_card")],
+                [
+                    InlineKeyboardButton(text=referral_button, callback_data="menu_referral"),
+                    InlineKeyboardButton(text=support_button, callback_data="menu_support"),
+                ],
+                [InlineKeyboardButton(text=reviews_button, callback_data="menu_reviews")],
+            ]
+        )
+
+    main_menu_reply = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=profile_button), KeyboardButton(text=tasks_button)],
+            [KeyboardButton(text=report_card_button)],
+            [KeyboardButton(text=referral_button), KeyboardButton(text=support_button)],
+            [KeyboardButton(text=reviews_button)],
+        ],
+        resize_keyboard=True,
+    )
+
+    def age_inline_keyboard() -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text=age_14_button, callback_data="age_14"),
+                    InlineKeyboardButton(text=age_18_button, callback_data="age_18"),
+                ],
+                [InlineKeyboardButton(text=ask_button, callback_data="ask")],
+            ]
+        )
+
+    def banks_inline_keyboard_14() -> InlineKeyboardMarkup:
+        rows = [[InlineKeyboardButton(text=btn, callback_data=f"bank::{btn}")] for btn in bank_14_buttons]
+        rows.append([InlineKeyboardButton(text=emoji_button, callback_data="emoji")])
+        rows.append([InlineKeyboardButton(text=other_tasks_button, callback_data="other_tasks")])
+        rows.append([InlineKeyboardButton(text=show_18_button, callback_data="show_18")])
+        rows.append([InlineKeyboardButton(text=ask_button, callback_data="ask")])
+        return InlineKeyboardMarkup(inline_keyboard=rows)
+
+    def banks_inline_keyboard_18() -> InlineKeyboardMarkup:
+        rows = [[InlineKeyboardButton(text=btn, callback_data=f"bank::{btn}")] for btn in bank_18_buttons]
+        rows.append([InlineKeyboardButton(text=emoji_button, callback_data="emoji")])
+        rows.append([InlineKeyboardButton(text=other_tasks_button, callback_data="other_tasks")])
+        rows.append([InlineKeyboardButton(text=ask_button, callback_data="ask")])
+        return InlineKeyboardMarkup(inline_keyboard=rows)
+
+    def all_banks_inline_keyboard() -> InlineKeyboardMarkup:
+        seen = set()
+        rows = []
+        for btn in bank_14_buttons + bank_18_buttons:
+            if btn in seen:
+                continue
+            seen.add(btn)
+            rows.append([InlineKeyboardButton(text=btn, callback_data=f"bank::{btn}")])
+        rows.append([InlineKeyboardButton(text=ask_button, callback_data="ask")])
+        return InlineKeyboardMarkup(inline_keyboard=rows)
+
+    async def send_start(message: Message):
+        photo_sent = False
+        if settings.start_photo_file_id:
+            await message.answer_photo(photo=settings.start_photo_file_id, caption=start_text, reply_markup=next_keyboard)
+            photo_sent = True
+        elif settings.start_photo_path:
+            try:
+                await message.answer_photo(photo=InputFile(settings.start_photo_path), caption=start_text, reply_markup=next_keyboard)
+                photo_sent = True
+            except FileNotFoundError:
+                photo_sent = False
+        if not photo_sent:
+            await message.answer(start_text, reply_markup=next_keyboard)
+        # Убираем автоматический вывод главного меню, чтобы не спамить при /start
+
+    @dp.message(CommandStart())
+    async def handle_start(message: Message) -> None:
+        await database.add_action(
+            action="start",
+            user_id=message.from_user.id if message.from_user else None,
+            username=message.from_user.username if message.from_user else None,
+            details={},
+        )
+        await send_start(message)
+
+    @dp.callback_query(F.data == "next_submit")
+    async def handle_next(call, state: FSMContext):
+        await state.clear()
+        await call.message.answer(
+            "Выберите ваш возраст:",
+            reply_markup=age_inline_keyboard(),
+        )
+        await call.answer()
+
+    @dp.message(F.text == next_button_text)
+    async def handle_next_text(message: Message, state: FSMContext) -> None:
+        step_text = (
+            "🧱 Как ты зарабатываешь деньги — шаг за шагом:\n\n"
+            "📌 1. Банк хочет клиента — ты им становишься\n"
+            " Ты оформляешь бесплатный продукт: карту, счёт или бонусную услугу через нашу ссылку.\n\n"
+            "📌 2. Мы получаем вознаграждение\n"
+            " Банк платит нам за твою регистрацию — это маркетинговый бюджет\n\n"
+            "📌 3. Мы платим тебе\n"
+            " Сразу в день выполнения. Без задержек. Без лишних вопросов."
+        )
+        why_text = (
+            "💼 Почему это работает?\n\n"
+            "Банкам всё равно, будешь ли ты пользоваться их картой или нет.\n"
+            " Им важно одно — чтобы ты просто оформил карту.\n"
+            " За это они платят нам.\n"
+            " 👌А мы делимся деньгами с тобой."
+        )
+        await message.answer(step_text)
+        await message.answer(why_text)
+        await message.answer(
+            "👉Сделай шаг — и заработай.",
+            reply_markup=actions_inline_keyboard,
+        )
+        await state.clear()
+
+    @dp.message(F.text == start_earn_button)
+    async def handle_start_earn(message: Message, state: FSMContext) -> None:
+        await database.add_action(
+            action="start_earn",
+            user_id=message.from_user.id if message.from_user else None,
+            username=message.from_user.username if message.from_user else None,
+            details={},
+        )
+        await state.clear()
+        await message.answer("Выберите ваш возраст:", reply_markup=age_inline_keyboard())
+
+    @dp.callback_query(F.data == "start_earn")
+    async def handle_start_earn_cb(call: CallbackQuery, state: FSMContext) -> None:
+        await database.add_action(
+            action="start_earn",
+            user_id=call.from_user.id if call.from_user else None,
+            username=call.from_user.username if call.from_user else None,
+            details={},
+        )
+        await state.clear()
+        await call.message.answer("Выберите ваш возраст:", reply_markup=age_inline_keyboard())
+        await call.answer()
+
+    @dp.message(F.text == age_14_button)
+    async def handle_age_14(message: Message, state: FSMContext) -> None:
+        await database.add_action(
+            action="age_selected",
+            user_id=message.from_user.id if message.from_user else None,
+            username=message.from_user.username if message.from_user else None,
+            details={"age": "14+"},
+        )
+        await state.clear()
+        await message.answer("Доступные задания для 14+:", reply_markup=banks_inline_keyboard_14())
+
+    @dp.message(F.text == age_18_button)
+    async def handle_age_18(message: Message, state: FSMContext) -> None:
+        await database.add_action(
+            action="age_selected",
+            user_id=message.from_user.id if message.from_user else None,
+            username=message.from_user.username if message.from_user else None,
+            details={"age": "18+"},
+        )
+        await state.clear()
+        await message.answer("Доступные задания для 18+:", reply_markup=banks_inline_keyboard_18())
+
+    @dp.message(F.text == ask_button)
+    async def handle_question(message: Message) -> None:
+        await database.add_action(
+            action="ask_question",
+            user_id=message.from_user.id if message.from_user else None,
+            username=message.from_user.username if message.from_user else None,
+            details={},
+        )
+        await message.answer(
+            "Напиши свой вопрос, и мы ответим. Если хочешь быстрее — отправь контакт или опиши задачу подробнее."
+        )
+
+    @dp.message(F.text.in_(bank_14_buttons + bank_18_buttons))
+    async def handle_bank_shortcut(message: Message, state: FSMContext) -> None:
+        bank_name = message.text.strip()
+        await state.update_data(bank=bank_name)
+        await state.set_state(SubmissionForm.comment)
+        await database.add_action(
+            action="bank_selected",
+            user_id=message.from_user.id if message.from_user else None,
+            username=message.from_user.username if message.from_user else None,
+            details={"bank": bank_name},
+        )
+        await message.answer("Добавь комментарий или условия (можно пропустить, отправив '-'):")
+
+    @dp.message(F.text == emoji_button)
+    async def handle_emoji(message: Message) -> None:
+        await database.add_action(
+            action="emoji_clicked",
+            user_id=message.from_user.id if message.from_user else None,
+            username=message.from_user.username if message.from_user else None,
+            details={},
+        )
+        await message.answer("Выбери задание или задай вопрос.", reply_markup=age_inline_keyboard())
+
+    @dp.message(F.text == other_tasks_button)
+    async def handle_other_tasks(message: Message) -> None:
+        await message.answer("Скоро добавим новые задания. Пока выбери из доступных или задай вопрос.")
+
+    @dp.message(F.text == show_18_button)
+    async def handle_show_18(message: Message) -> None:
+        await message.answer("Доступные задания 18+:", reply_markup=banks_inline_keyboard_18())
+
+    @dp.message(F.text == tasks_button)
+    async def handle_tasks_menu(message: Message, state: FSMContext) -> None:
+        await state.clear()
+        await message.answer("Выберите ваш возраст:", reply_markup=age_inline_keyboard())
+
+    @dp.callback_query(F.data == "age_14")
+    async def handle_age_14_cb(call: CallbackQuery, state: FSMContext) -> None:
+        await database.add_action(
+            action="age_selected",
+            user_id=call.from_user.id if call.from_user else None,
+            username=call.from_user.username if call.from_user else None,
+            details={"age": "14+"},
+        )
+        await state.clear()
+        await call.message.answer("Доступные задания для 14+:", reply_markup=banks_inline_keyboard_14())
+        await call.answer()
+
+    @dp.callback_query(F.data == "age_18")
+    async def handle_age_18_cb(call: CallbackQuery, state: FSMContext) -> None:
+        await database.add_action(
+            action="age_selected",
+            user_id=call.from_user.id if call.from_user else None,
+            username=call.from_user.username if call.from_user else None,
+            details={"age": "18+"},
+        )
+        await state.clear()
+        await call.message.answer("Доступные задания для 18+:", reply_markup=banks_inline_keyboard_18())
+        await call.answer()
+
+    @dp.callback_query(F.data.startswith("bank::"))
+    async def handle_bank_cb(call: CallbackQuery, state: FSMContext) -> None:
+        bank_name = call.data.split("::", 1)[1]
+        await state.update_data(bank=bank_name)
+        await state.set_state(SubmissionForm.comment)
+        await database.add_action(
+            action="bank_selected",
+            user_id=call.from_user.id if call.from_user else None,
+            username=call.from_user.username if call.from_user else None,
+            details={"bank": bank_name},
+        )
+        await call.message.answer("Добавь комментарий или условия (можно пропустить, отправив '-'):")
+        await call.answer()
+
+    @dp.callback_query(F.data == "emoji")
+    async def handle_emoji_cb(call: CallbackQuery) -> None:
+        await database.add_action(
+            action="emoji_clicked",
+            user_id=call.from_user.id if call.from_user else None,
+            username=call.from_user.username if call.from_user else None,
+            details={},
+        )
+        await call.message.answer("Выбери возраст и задание.", reply_markup=age_inline_keyboard())
+        await call.answer()
+
+    @dp.callback_query(F.data == "other_tasks")
+    async def handle_other_tasks_cb(call: CallbackQuery) -> None:
+        await call.message.answer("Скоро добавим новые задания. Пока выбери из доступных или задай вопрос.")
+        await call.answer()
+
+    @dp.callback_query(F.data == "show_18")
+    async def handle_show_18_cb(call: CallbackQuery) -> None:
+        await call.message.answer("Доступные задания 18+:", reply_markup=banks_inline_keyboard_18())
+        await call.answer()
+
+    @dp.callback_query(F.data == "ask")
+    async def handle_ask_cb(call: CallbackQuery) -> None:
+        await database.add_action(
+            action="ask_question",
+            user_id=call.from_user.id if call.from_user else None,
+            username=call.from_user.username if call.from_user else None,
+            details={},
+        )
+        await call.message.answer("Напиши свой вопрос, и мы ответим. Можно приложить скрин/файл.")
+        await call.answer()
+
+    def _profile_text(obj: Message | CallbackQuery) -> str:
+        u = obj.from_user if isinstance(obj, CallbackQuery) else obj.from_user
+        lines = ["Профиль"]
+        if u:
+            lines.append(f"ID: {u.id}")
+            if u.username:
+                lines.append(f"Username: @{u.username}")
+        else:
+            lines.append("Нет данных пользователя")
+        return "\n".join(lines)
+
+    @dp.callback_query(F.data == "menu_profile")
+    async def handle_profile_cb(call: CallbackQuery) -> None:
+        await call.message.answer(_profile_text(call), reply_markup=main_menu_inline())
+        await call.answer()
+
+    @dp.callback_query(F.data == "menu_referral")
+    async def handle_referral_cb(call: CallbackQuery) -> None:
+        await database.add_action(
+            action="referral_open",
+            user_id=call.from_user.id if call.from_user else None,
+            username=call.from_user.username if call.from_user else None,
+            details={},
+        )
+        await call.message.answer(
+            "Реферальная программа: приглашай друзей, они оформляют задания — получаешь % от их вознаграждения. "
+            "Скоро добавим персональные ссылки и учет начислений.",
+            reply_markup=main_menu_inline(),
+        )
+        await call.answer()
+
+    @dp.message(F.text == profile_button)
+    async def handle_profile_msg(message: Message) -> None:
+        await message.answer(_profile_text(message), reply_markup=main_menu_inline())
+
+    @dp.message(F.text == referral_button)
+    async def handle_referral_msg(message: Message) -> None:
+        await database.add_action(
+            action="referral_open",
+            user_id=message.from_user.id if message.from_user else None,
+            username=message.from_user.username if message.from_user else None,
+            details={},
+        )
+        await message.answer(
+            "Реферальная программа: приглашай друзей, они оформляют задания — получаешь % от их вознаграждения. "
+            "Скоро добавим персональные ссылки и учет начислений.",
+            reply_markup=main_menu_inline(),
+        )
+
+    @dp.message(F.text == support_button)
+    async def handle_support_msg(message: Message) -> None:
+        await database.add_action(
+            action="support_open",
+            user_id=message.from_user.id if message.from_user else None,
+            username=message.from_user.username if message.from_user else None,
+            details={},
+        )
+        await message.answer("Опиши проблему или вопрос — мы ответим. Можно приложить скрин/файл.", reply_markup=main_menu_inline())
+
+    @dp.message(F.text == report_card_button)
+    async def handle_report_card_msg(message: Message) -> None:
+        await database.add_action(
+            action="report_card",
+            user_id=message.from_user.id if message.from_user else None,
+            username=message.from_user.username if message.from_user else None,
+            details={},
+        )
+        await message.answer(
+            "Напиши, какую карту получил, и приложи скрин/фото (можно сразу в одном сообщении).",
+            reply_markup=main_menu_inline(),
+        )
+
+    @dp.message(F.text == tasks_button)
+    async def handle_tasks_msg(message: Message, state: FSMContext) -> None:
+        await state.clear()
+        await message.answer("Выберите ваш возраст:", reply_markup=age_inline_keyboard())
+
+    @dp.message(F.text == reviews_button)
+    async def handle_reviews_msg(message: Message) -> None:
+        await message.answer(
+            "⭐ Отзывы: скоро добавим витрину отзывов. Пока можешь написать вопрос в поддержку.",
+            reply_markup=main_menu_inline(),
+        )
+
+    @dp.callback_query(F.data == "menu_support")
+    async def handle_support_cb(call: CallbackQuery) -> None:
+        await database.add_action(
+            action="support_open",
+            user_id=call.from_user.id if call.from_user else None,
+            username=call.from_user.username if call.from_user else None,
+            details={},
+        )
+        await call.message.answer("Опиши проблему или вопрос — мы ответим. Можно приложить скрин/файл.", reply_markup=main_menu_inline())
+        await call.answer()
+
+    @dp.callback_query(F.data == "menu_report_card")
+    async def handle_report_card_cb(call: CallbackQuery) -> None:
+        await database.add_action(
+            action="report_card",
+            user_id=call.from_user.id if call.from_user else None,
+            username=call.from_user.username if call.from_user else None,
+            details={},
+        )
+        await call.message.answer(
+            "Напиши, какую карту получил, и приложи скрин/фото (можно сразу в одном сообщении).",
+            reply_markup=main_menu_inline(),
+        )
+        await call.answer()
+
+    @dp.callback_query(F.data == "menu_tasks")
+    async def handle_tasks_cb(call: CallbackQuery, state: FSMContext) -> None:
+        await state.clear()
+        await call.message.answer("Выберите ваш возраст:", reply_markup=age_inline_keyboard())
+        await call.answer()
+
+    @dp.callback_query(F.data == "menu_reviews")
+    async def handle_reviews_cb(call: CallbackQuery) -> None:
+        await call.message.answer(
+            "⭐ Отзывы: скоро добавим витрину отзывов. Пока можешь написать вопрос в поддержку.",
+            reply_markup=main_menu_inline(),
+        )
+        await call.answer()
+
+    @dp.message(Command("help"))
+    async def handle_help(message: Message) -> None:
+        await message.answer(
+            "Доступные команды:\n"
+            "/submit — отправить новую заявку\n"
+            "/my — посмотреть последние отправленные заявки\n"
+            "/actions — последние события (для админов)"
+        )
+
+    @dp.message(Command("submit"))
+    async def handle_submit(message: Message, state: FSMContext) -> None:
+        await state.set_state(SubmissionForm.bank)
+        await message.answer("Укажи название банка, по которому хочешь оставить реферальную заявку:")
+
+    @dp.message(SubmissionForm.bank)
+    async def handle_bank(message: Message, state: FSMContext) -> None:
+        await state.update_data(bank=message.text.strip())
+        await state.set_state(SubmissionForm.comment)
+        await message.answer("Добавь комментарий или условия (можно пропустить, отправив '-'):")
+
+    @dp.message(SubmissionForm.comment)
+    async def handle_comment(message: Message, state: FSMContext) -> None:
+        comment = None if message.text.strip() == "-" else message.text.strip()
+        await state.update_data(comment=comment)
+        await state.set_state(SubmissionForm.evidence)
+        await message.answer("Отправь скрин/файл подтверждения. Можно пропустить, отправив слово 'нет'.")
+
+    @dp.message(SubmissionForm.evidence, F.document | F.photo | F.text)
+    async def handle_evidence(message: Message, state: FSMContext) -> None:
+        file_id: Optional[str] = None
+        if message.photo:
+            file_id = message.photo[-1].file_id
+        elif message.document:
+            file_id = message.document.file_id
+        elif message.text and message.text.lower().strip() in {"нет", "no"}:
+            file_id = None
+        else:
+            await message.answer("Нужно отправить фото/файл или написать 'нет'. Попробуй снова.")
+            return
+
+        data = await state.get_data()
+        bank = data.get("bank")
+        comment = data.get("comment")
+
+        submission_id = await database.add_submission(
+            user_id=message.from_user.id if message.from_user else 0,
+            username=message.from_user.username if message.from_user else None,
+            bank=bank,
+            comment=comment,
+            file_id=file_id,
+        )
+        await database.add_action(
+            action="submission_created",
+            user_id=message.from_user.id if message.from_user else None,
+            username=message.from_user.username if message.from_user else None,
+            details={"submission_id": submission_id, "bank": bank},
+        )
+        await state.clear()
+        await message.answer(
+            "Заявка отправлена! Мы свяжемся с тобой после проверки.\n"
+            "Посмотреть последние заявки: /my"
+        )
+
+    @dp.message(Command("my"))
+    async def handle_my(message: Message) -> None:
+        submissions = await database.list_submissions(limit=10)
+        user_subs = [
+            s for s in submissions if s["user_id"] == (message.from_user.id if message.from_user else None)
+        ]
+        if not user_subs:
+            await message.answer("У тебя пока нет заявок. Попробуй команду /submit.")
+            return
+
+        lines = []
+        for item in user_subs:
+            lines.append(
+                f"#{item['id']} • {item['bank']} • статус: {item['status']} • отправлено {item['created_at']}"
+            )
+        await message.answer("\n".join(lines))
+
+    @dp.message(Command("actions"))
+    async def handle_actions(message: Message) -> None:
+        if not message.from_user or not _is_admin(message.from_user.id, settings):
+            await message.answer("Недостаточно прав.")
+            return
+        actions = await database.list_actions(limit=15)
+        if not actions:
+            await message.answer("Событий пока нет.")
+            return
+        lines = []
+        for item in actions:
+            lines.append(
+                f"{item['created_at']} • {item['action']} • user:{item['user_id']} • details:{item['details']}"
+            )
+        await message.answer("\n".join(lines))
+
+    return dp

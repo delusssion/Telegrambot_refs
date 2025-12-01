@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Referral Bot Admin</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #111827;
+      --accent: #22c55e;
+      --accent-2: #38bdf8;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --border: #1f2937;
+      --error: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #0b1221 50%, #0f172a 100%);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px;
+    }
+    h1 {
+      margin: 0 0 12px;
+      letter-spacing: 0.5px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    }
+    label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #0b1221;
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+    }
+    input:focus { border-color: var(--accent-2); }
+    .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+    button {
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: none;
+      color: #0b1221;
+      background: var(--accent);
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.1s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+    }
+    button.secondary { background: var(--accent-2); color: #0b1221; }
+    button:active { transform: translateY(1px); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 10px; border-bottom: 1px solid var(--border); text-align: left; }
+    th { color: var(--muted); font-weight: 600; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+    .pill {
+      display: inline-flex;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--accent);
+      font-weight: 600;
+      font-size: 12px;
+    }
+    .error { color: var(--error); margin-top: 6px; }
+    .muted { color: var(--muted); font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>Админка реферального бота</h1>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <label for="apiKey">X-API-Key (если задан)</label>
+        <input id="apiKey" type="password" placeholder="API_KEY или оставь пустым">
+      </div>
+      <div>
+        <label for="baseUrl">Базовый URL</label>
+        <input id="baseUrl" type="text" placeholder="http://localhost:8080" value="">
+      </div>
+      <div>
+        <label for="limit">Лимит записей</label>
+        <input id="limit" type="number" value="50" min="1" max="500">
+      </div>
+    </div>
+    <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+      <button id="loadSubs">Загрузить заявки</button>
+      <button id="loadActions" class="secondary">Загрузить события</button>
+    </div>
+    <div id="status" class="muted" style="margin-top:8px;"></div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0;">Заявки</h3>
+    <div id="subsError" class="error"></div>
+    <table id="subsTable">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Пользователь</th>
+          <th>Банк</th>
+          <th>Комментарий</th>
+          <th>Статус</th>
+          <th>Создано</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0;">События</h3>
+    <div id="actionsError" class="error"></div>
+    <table id="actionsTable">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Время</th>
+          <th>Действие</th>
+          <th>Пользователь</th>
+          <th>Детали</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script>
+    const qs = sel => document.querySelector(sel);
+    const statusEl = qs('#status');
+    const subsBody = qs('#subsTable tbody');
+    const actionsBody = qs('#actionsTable tbody');
+    const subsError = qs('#subsError');
+    const actionsError = qs('#actionsError');
+
+    function getBaseUrl() {
+      const raw = qs('#baseUrl').value.trim();
+      if (raw) return raw.replace(/\/$/, '');
+      return '';
+    }
+
+    function getHeaders() {
+      const apiKey = qs('#apiKey').value.trim();
+      const headers = {};
+      if (apiKey) headers['X-API-Key'] = apiKey;
+      return headers;
+    }
+
+    async function fetchData(endpoint) {
+      const limit = Number(qs('#limit').value) || 50;
+      const url = `${getBaseUrl()}${endpoint}?limit=${limit}`;
+      const resp = await fetch(url, { headers: getHeaders() });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(`${resp.status}: ${text}`);
+      }
+      return resp.json();
+    }
+
+    function setStatus(text) {
+      statusEl.textContent = text;
+    }
+
+    async function loadSubmissions() {
+      subsError.textContent = '';
+      subsBody.innerHTML = '';
+      setStatus('Загружаю заявки...');
+      try {
+        const data = await fetchData('/submissions');
+        data.items.forEach(item => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${item.id}</td>
+            <td>${item.username || item.user_id || '—'}</td>
+            <td>${item.bank}</td>
+            <td>${item.comment || '—'}</td>
+            <td><span class="pill">${item.status}</span></td>
+            <td>${item.created_at}</td>
+          `;
+          subsBody.appendChild(tr);
+        });
+        setStatus(`Заявок: ${data.items.length}`);
+      } catch (err) {
+        subsError.textContent = `Ошибка: ${err.message}`;
+        setStatus('Не удалось загрузить заявки');
+      }
+    }
+
+    async function loadActions() {
+      actionsError.textContent = '';
+      actionsBody.innerHTML = '';
+      setStatus('Загружаю события...');
+      try {
+        const data = await fetchData('/actions');
+        data.items.forEach(item => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${item.id}</td>
+            <td>${item.created_at}</td>
+            <td>${item.action}</td>
+            <td>${item.username || item.user_id || '—'}</td>
+            <td><code>${JSON.stringify(item.details || {})}</code></td>
+          `;
+          actionsBody.appendChild(tr);
+        });
+        setStatus(`Событий: ${data.items.length}`);
+      } catch (err) {
+        actionsError.textContent = `Ошибка: ${err.message}`;
+        setStatus('Не удалось загрузить события');
+      }
+    }
+
+    qs('#loadSubs').addEventListener('click', loadSubmissions);
+    qs('#loadActions').addEventListener('click', loadActions);
+
+    // Первичная загрузка
+    loadSubmissions();
+    loadActions();
+  </script>
+</body>
+</html>
