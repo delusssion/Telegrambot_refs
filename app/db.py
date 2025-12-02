@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import aiosqlite
 
@@ -66,10 +66,10 @@ class Database:
     async def add_submission(
         self,
         user_id: int,
-        username: str | None,
+        username: Optional[str],
         bank: str,
-        comment: str | None,
-        file_id: str | None,
+        comment: Optional[str],
+        file_id: Optional[str],
     ) -> int:
         db = await self.connect()
         try:
@@ -117,9 +117,9 @@ class Database:
     async def add_action(
         self,
         action: str,
-        user_id: int | None,
-        username: str | None,
-        details: Dict[str, Any] | None = None,
+        user_id: Optional[int],
+        username: Optional[str],
+        details: Optional[Dict[str, Any]] = None,
     ) -> int:
         serialized = json.dumps(details or {})
         db = await self.connect()
@@ -165,10 +165,10 @@ class Database:
 
     async def add_question(
         self,
-        user_id: int | None,
-        username: str | None,
+        user_id: Optional[int],
+        username: Optional[str],
         message: str,
-        file_id: str | None = None,
+        file_id: Optional[str] = None,
     ) -> int:
         db = await self.connect()
         try:
@@ -184,7 +184,7 @@ class Database:
         finally:
             await db.close()
 
-    async def get_question(self, question_id: int) -> Dict[str, Any] | None:
+    async def get_question(self, question_id: int) -> Optional[Dict[str, Any]]:
         db = await self.connect()
         try:
             cursor = await db.execute(
@@ -237,10 +237,10 @@ class Database:
 
     async def add_report(
         self,
-        user_id: int | None,
-        username: str | None,
-        message: str | None,
-        file_id: str | None = None,
+        user_id: Optional[int],
+        username: Optional[str],
+        message: Optional[str],
+        file_id: Optional[str] = None,
     ) -> int:
         db = await self.connect()
         try:
@@ -256,7 +256,7 @@ class Database:
         finally:
             await db.close()
 
-    async def get_report(self, report_id: int) -> Dict[str, Any] | None:
+    async def get_report(self, report_id: int) -> Optional[Dict[str, Any]]:
         db = await self.connect()
         try:
             cursor = await db.execute(

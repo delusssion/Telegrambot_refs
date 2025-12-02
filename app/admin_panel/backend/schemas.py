@@ -1,5 +1,6 @@
 from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
+from typing import Optional
 
 
 class LoginRequest(BaseModel):
@@ -15,20 +16,20 @@ class LoginResponse(BaseModel):
 class SubmissionResponse(BaseModel):
     id: int
     user_id: int
-    username: str | None
+    username: Optional[str]
     bank: str
-    comment: str | None
-    file_id: str | None
+    comment: Optional[str]
+    file_id: Optional[str]
     status: str
     created_at: str
 
 
 class ActionResponse(BaseModel):
     id: int
-    user_id: int | None
-    username: str | None
+    user_id: Optional[int]
+    username: Optional[str]
     action: str
-    details: dict | None
+    details: Optional[dict]
     created_at: str
 
     @field_validator("created_at", mode="before")

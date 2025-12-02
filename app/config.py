@@ -1,9 +1,9 @@
 import os
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 
-def _parse_admins(value: str | None) -> List[int]:
+def _parse_admins(value: Optional[str]) -> List[int]:
     if not value:
         return []
     admins: List[int] = []
@@ -23,14 +23,14 @@ class Settings:
     bot_token: str
     api_host: str = "0.0.0.0"
     api_port: int = 8080
-    api_key: str | None = None
+    api_key: Optional[str] = None
     database_path: str = "data/bot.db"
-    admin_ids: List[int] | None = None
-    admin_panel_user_id: int | None = None
-    admin_panel_password: str | None = None
-    admin_panel_secret: str | None = None
-    start_photo_file_id: str | None = None
-    start_photo_path: str | None = None
+    admin_ids: Optional[List[int]] = None
+    admin_panel_user_id: Optional[int] = None
+    admin_panel_password: Optional[str] = None
+    admin_panel_secret: Optional[str] = None
+    start_photo_file_id: Optional[str] = None
+    start_photo_path: Optional[str] = None
 
     @classmethod
     def load(cls) -> "Settings":

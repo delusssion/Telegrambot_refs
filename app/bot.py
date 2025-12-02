@@ -151,7 +151,7 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         if age:
             await state.update_data(preferred_age=age)
 
-    async def show_tasks_or_main(obj: Message | CallbackQuery, state: FSMContext) -> None:
+    async def show_tasks_or_main(obj, state: FSMContext) -> None:
         data = await state.get_data()
         preferred_age = data.get("preferred_age")
         if preferred_age:
@@ -262,7 +262,7 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         )
         await clear_state_keep_age(state)
 
-    async def _show_tasks(message_obj: Message | CallbackQuery, state: FSMContext) -> None:
+    async def _show_tasks(message_obj, state: FSMContext) -> None:
         data = await state.get_data()
         preferred_age = data.get("preferred_age")
         if preferred_age:
@@ -312,14 +312,14 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         await state.set_state(None)
         await _show_tasks(call, state)
 
-    def _get_user_obj(obj: Message | CallbackQuery):
+    def _get_user_obj(obj):
         if isinstance(obj, CallbackQuery):
             return obj.from_user
         if isinstance(obj, Message):
             return obj.from_user
         return None
 
-    async def _store_age_and_show(age_label: str, message_obj: Message | CallbackQuery, state: FSMContext) -> None:
+    async def _store_age_and_show(age_label: str, message_obj, state: FSMContext) -> None:
         data = await state.get_data()
         data["preferred_age"] = age_label
         await state.set_state(None)
@@ -483,7 +483,7 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         await clear_state_keep_age(state)
         await show_tasks_or_main(call, state)
 
-    def _profile_text(obj: Message | CallbackQuery) -> str:
+    def _profile_text(obj) -> str:
         u = obj.from_user if isinstance(obj, CallbackQuery) else obj.from_user
         lines = ["Профиль"]
         if u:
