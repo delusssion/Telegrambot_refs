@@ -139,13 +139,12 @@ function renderPanel() {
             <input type="number" id="limit" min="1" max="500" value="${state.limit}">
           </div>
         </div>
-        <div class="panel-header">
-          <h3>Заявки</h3>
-          <button id="load-subs">Обновить</button>
-        </div>
-        <div id="subs-status" class="muted"></div>
-        <div class="table-wrap">
-          <table>
+      <div class="panel-header">
+        <h3>Заявки</h3>
+      </div>
+      <div id="subs-status" class="muted"></div>
+      <div class="table-wrap">
+        <table>
             <thead>
               <tr>
                 <th>ID</th>
@@ -164,7 +163,6 @@ function renderPanel() {
       <div class="panel-block">
         <div class="panel-header">
           <h3>Последние действия</h3>
-          <button class="secondary" id="load-actions">Обновить</button>
         </div>
         <div id="actions-status" class="muted"></div>
         <ul id="actions-list" class="logs"></ul>
@@ -249,8 +247,6 @@ function renderPanel() {
     setLimit(n);
   });
 
-  document.getElementById("load-subs").addEventListener("click", loadSubmissions);
-  document.getElementById("load-actions").addEventListener("click", loadActions);
   document.getElementById("load-questions").addEventListener("click", loadQuestions);
   document.getElementById("load-reports").addEventListener("click", loadReports);
   document.getElementById("broadcast-form").addEventListener("submit", handleBroadcast);
