@@ -281,12 +281,13 @@ async function loadQuestions() {
   container.innerHTML = "";
   try {
     const data = await apiFetch(`/questions?limit=${state.limit}`);
-    status.textContent = `Вопросов: ${data.items.length}`;
-    if (!data.items.length) {
+    const items = (data.items || []).filter((i) => (i.message || "").trim().length >= 5);
+    status.textContent = `Вопросов: ${items.length}`;
+    if (!items.length) {
       container.innerHTML = `<p class="muted">Нет вопросов.</p>`;
       return;
     }
-    data.items.forEach((item) => {
+    items.forEach((item) => {
       const card = document.createElement("div");
       card.className = "mini-card";
       card.innerHTML = `
@@ -298,6 +299,7 @@ async function loadQuestions() {
         </div>
         <div class="mini-actions">
           <button data-id="${item.id}" class="secondary reply-question">Ответить</button>
+          <button data-id="${item.id}" class="danger reject-question">Отклонить</button>
         </div>
       `;
       container.appendChild(card);
@@ -313,6 +315,20 @@ async function loadQuestions() {
             body: JSON.stringify({ message: text }),
           });
           showMessage("Ответ отправлен.");
+          loadActions();
+        } catch (err) {
+          showMessage(err.message);
+        }
+      });
+    });
+    container.querySelectorAll(".reject-question").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        const id = e.target.dataset.id;
+        if (!confirm("Отклонить вопрос и убрать из списка?")) return;
+        try {
+          await apiFetch(`/questions/${id}/reject`, { method: "POST" });
+          e.target.closest(".mini-card").remove();
+          showMessage("Отклонено.");
           loadActions();
         } catch (err) {
           showMessage(err.message);

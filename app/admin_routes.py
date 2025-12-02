@@ -183,6 +183,17 @@ def build_admin_router(
         )
         return {"status": "ok"}
 
+    @router.post("/questions/{question_id}/reject")
+    async def reject_question(question_id: int, auth: None = Auth) -> dict:
+        await database.delete_question(question_id)
+        await database.add_action(
+            action="question_rejected",
+            user_id=None,
+            username=None,
+            details={"question_id": question_id},
+        )
+        return {"status": "ok"}
+
     @router.get("/admin/login", include_in_schema=False)
     async def login_page() -> FileResponse:
         login_file = static_dir / "login.html"

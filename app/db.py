@@ -208,6 +208,14 @@ class Database:
         finally:
             await db.close()
 
+    async def delete_question(self, question_id: int) -> None:
+        db = await self.connect()
+        try:
+            await db.execute("DELETE FROM questions WHERE id = ?", (question_id,))
+            await db.commit()
+        finally:
+            await db.close()
+
     async def list_questions(self, limit: int = 50) -> List[Dict[str, Any]]:
         db = await self.connect()
         try:
