@@ -252,13 +252,13 @@ async function loadSubmissions() {
   statusUsersAll.textContent = "—";
   statusUsersWeek.textContent = "—";
   try {
-    const data = await apiFetch(`/submissions?limit=${state.limit}`);
-    const uniqueUsers = new Set(data.items.map((i) => i.user_id).filter(Boolean));
+    const data = await apiFetch(`/submissions?limit=1000`);
+    const uniqueUsers = new Set((data.items || []).map((i) => i.user_id).filter(Boolean));
     statusUsersAll.textContent = uniqueUsers.size || "0";
 
     const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
     const weekUsers = new Set(
-      data.items
+      (data.items || [])
         .filter((i) => Date.parse(i.created_at) >= weekAgo)
         .map((i) => i.user_id)
         .filter(Boolean)
@@ -320,6 +320,7 @@ async function loadQuestions() {
             body: JSON.stringify({ message: text }),
           });
           showMessage("Ответ отправлен.");
+          e.target.closest(".mini-card")?.remove();
           loadActions();
         } catch (err) {
           showMessage(err.message);
@@ -384,6 +385,7 @@ async function loadReports() {
             body: JSON.stringify({ message: text }),
           });
           showMessage("Ответ отправлен.");
+          e.target.closest(".mini-card")?.remove();
           loadActions();
         } catch (err) {
           showMessage(err.message);
