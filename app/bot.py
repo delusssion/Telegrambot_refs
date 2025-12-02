@@ -146,6 +146,95 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         if age:
             await state.update_data(preferred_age=age)
 
+    def _special_banks():
+        return {
+            "💳 Карта Альфа Банк 5ОО Р": {
+                "name": "Альфа-Банк",
+                "link": "https://alfa.me/fwXuQ3",
+            },
+            "💳 Карта Т-Банк 1ООО Р": {
+                "name": "Т-Банк",
+                "link": "https://tbank.ru/baf/1BgRcSNOGAp",
+                "custom": "tbank",
+            },
+        }
+
+    async def _clear_menu_message(state: FSMContext, msg_obj) -> None:
+        data = await state.get_data()
+        last_id = data.get("menu_msg_id")
+        chat_id = msg_obj.chat.id
+        if last_id:
+            try:
+                await msg_obj.bot.delete_message(chat_id=chat_id, message_id=last_id)
+            except Exception:
+                pass
+
+    async def _send_menu(obj, state: FSMContext, text: str, reply_markup=None):
+        msg_obj = obj.message if isinstance(obj, CallbackQuery) else obj
+        await _clear_menu_message(state, msg_obj)
+        sent = await msg_obj.answer(text, reply_markup=reply_markup)
+        await state.update_data(menu_msg_id=sent.message_id)
+
+    def _instruction_text(bank_name: str, link: str, custom: str | None = None) -> str:
+        if custom == "tbank":
+            return (
+                f"▌ Шаг 1: Переход по <a href=\"{link}\">реферальной ссылке</a>\n\n"
+                f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+                f"▌ Шаг 2: Регистрация и заполнение анкеты\n\n"
+                f"Введите ваши личные данные: ФИО, номер телефона, e-mail.\n"
+                f"Заполните короткую анкету для выпуска карты.\n"
+                f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+                f"▌ Шаг 3: Ожидание одобрения\n\n"
+                f"Банк проверит заявку. Обычно решение приходит быстро — уведомление появится в приложении или по SMS.\n"
+                f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+                f"▌ Шаг 4: Выбор способа доставки карты\n\n"
+                f"Т-Банк предложит удобный способ получения карты:\n"
+                f"Курьерская доставка на дом или в офис.\n"
+                f"Самовывоз в одном из пунктов выдачи.\n"
+                f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+                f"▌ Шаг 5: Активация карты\n\n"
+                f"После получения карты активируйте её через приложение Т-Банка. Это откроет доступ ко всем функциям и бонусам.\n"
+                f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+                f"▌ Шаг 6: Выполнение ТЗ от банка (для получения бонуса)\n\n"
+                f"Совершить покупку по карте хоть на 1 рубль\n\n"
+                f"Важно: операция должна быть офлайн или обычной онлайн-покупкой — переводы и снятие наличных не учитываются."
+            )
+
+        return (
+            f"▌ Инструкция по оформлению дебетовой карты {bank_name} по реферальной ссылке\n\n"
+            f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+            f"▌ Шаг 1: Переход по <a href=\"{link}\">реферальной ссылке</a>\n\n"
+            f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+            f"▌ Шаг 2: Регистрация и заполнение анкеты\n\n"
+            f"- Регистрация: Укажите ваши личные данные (ФИО, номер телефона, электронную почту).\n"
+            f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+            f"▌ Шаг 3: Ожидание одобрения\n\n"
+            f"Банк проверит вашу заявку. Обычно решение принимается достаточно быстро. "
+            f"После подтверждения вам поступит уведомление о статусе вашей заявки.\n\n"
+            f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+            f"▌ Шаг 4: Выбор способа доставки карты\n\n"
+            f"- Доставка курьером домой или в офис.\n"
+            f"- Самовывоз в ближайшем отделении банка.\n\n"
+            f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+            f"▌ Шаг 5: Активация карты\n\n"
+            f"Получив карту, активируйте её через мобильное приложение или банкомат. "
+            f"Это позволит начать пользоваться преимуществами карты.\n\n"
+            f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+            f"▌ Шаг 6: Выполнение ТЗ от банка\n\n"
+            f"- Совершите любую покупку от 1 рубля\n\n"
+            f"ВАЖНО❗️: Покупка, сделанная онлайн, не будет засчитана."
+        )
+
+    async def _show_banks_by_age(state: FSMContext, obj) -> None:
+        data = await state.get_data()
+        age_label = data.get("preferred_age")
+        if age_label:
+            await _store_age_and_show(age_label, obj, state)
+        else:
+            await _send_menu(obj, state, "Выберите ваш возраст:", reply_markup=age_inline_keyboard())
+            if isinstance(obj, CallbackQuery):
+                await obj.answer()
+
     async def _send_menu(obj, state: FSMContext, text: str, reply_markup=None):
         # удаляем предыдущее меню, если было
         data = await state.get_data()
@@ -206,29 +295,32 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         rows.append([InlineKeyboardButton(text=ask_button, callback_data="ask")])
         return InlineKeyboardMarkup(inline_keyboard=rows)
 
-    async def send_start(message: Message):
+    async def send_start(message: Message, state: FSMContext):
+        await _clear_menu_message(state, message)
         photo_sent = False
         if settings.start_photo_file_id:
-            await message.answer_photo(photo=settings.start_photo_file_id, caption=start_text, reply_markup=next_keyboard)
+            sent = await message.answer_photo(photo=settings.start_photo_file_id, caption=start_text, reply_markup=next_keyboard)
             photo_sent = True
+            await state.update_data(menu_msg_id=sent.message_id)
         elif settings.start_photo_path:
             try:
-                await message.answer_photo(photo=InputFile(settings.start_photo_path), caption=start_text, reply_markup=next_keyboard)
+                sent = await message.answer_photo(photo=InputFile(settings.start_photo_path), caption=start_text, reply_markup=next_keyboard)
                 photo_sent = True
+                await state.update_data(menu_msg_id=sent.message_id)
             except FileNotFoundError:
                 photo_sent = False
         if not photo_sent:
-            await message.answer(start_text, reply_markup=next_keyboard)
+            await _send_menu(message, state, start_text, reply_markup=next_keyboard)
 
     @dp.message(CommandStart())
-    async def handle_start(message: Message) -> None:
+    async def handle_start(message: Message, state: FSMContext) -> None:
         await database.add_action(
             action="start",
             user_id=message.from_user.id if message.from_user else None,
             username=message.from_user.username if message.from_user else None,
             details={},
         )
-        await send_start(message)
+        await send_start(message, state)
 
     @dp.callback_query(F.data == "next_submit")
     async def handle_next(call, state: FSMContext):
@@ -271,29 +363,15 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         if preferred_age:
             prompt = f"Доступные задания для {preferred_age}:"
             kb = banks_inline_keyboard(preferred_age)
+            await _send_menu(message_obj, state, prompt, reply_markup=kb)
             if isinstance(message_obj, CallbackQuery):
-                await message_obj.message.answer(prompt, reply_markup=kb)
                 await message_obj.answer()
-            else:
-                await message_obj.answer(prompt, reply_markup=kb)
         else:
+            await _send_menu(message_obj, state, "Выберите ваш возраст:", reply_markup=age_inline_keyboard())
             if isinstance(message_obj, CallbackQuery):
-                await message_obj.message.answer("Выберите ваш возраст:", reply_markup=age_inline_keyboard())
                 await message_obj.answer()
-            else:
-                await message_obj.answer("Выберите ваш возраст:", reply_markup=age_inline_keyboard())
 
     @dp.message(F.text == start_earn_button)
-    async def handle_start_earn(message: Message, state: FSMContext) -> None:
-        await database.add_action(
-            action="start_earn",
-            user_id=message.from_user.id if message.from_user else None,
-            username=message.from_user.username if message.from_user else None,
-            details={},
-        )
-        await state.set_state(None)
-        await _show_tasks(message, state)
-
     async def handle_start_earn(message: Message, state: FSMContext) -> None:
         await database.add_action(
             action="start_earn",
@@ -362,18 +440,39 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
             reply_markup=cancel_support_keyboard,
         )
 
+    async def _handle_bank_selection(obj, state: FSMContext, bank_name: str) -> None:
+        special = _special_banks()
+        if bank_name in special:
+            info = special[bank_name]
+            text = (
+                f"{bank_name}\n\n"
+                f"Нажми «Начать выполнение», чтобы получить инструкцию. "
+                f"Если передумал — «Назад» вернет к списку карт."
+            )
+            kb = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text="🚀 Начать выполнение", callback_data=f"start_task::{bank_name}")],
+                    [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_banks")],
+                ]
+            )
+            await _send_menu(obj, state, text, reply_markup=kb)
+            return
+
+        await state.update_data(bank=bank_name)
+        await state.set_state(SubmissionForm.comment)
+        u = _get_user_obj(obj)
+        await database.add_action(
+            action="bank_selected",
+            user_id=u.id if u else None,
+            username=u.username if u else None,
+            details={"bank": bank_name},
+        )
+        await _send_menu(obj, state, "Добавь комментарий или условия (можно пропустить, отправив '-'):")
+
     @dp.message(F.text.in_(bank_14_buttons + bank_18_buttons))
     async def handle_bank_shortcut(message: Message, state: FSMContext) -> None:
         bank_name = message.text.strip()
-        await state.update_data(bank=bank_name)
-        await state.set_state(SubmissionForm.comment)
-        await database.add_action(
-            action="bank_selected",
-            user_id=message.from_user.id if message.from_user else None,
-            username=message.from_user.username if message.from_user else None,
-            details={"bank": bank_name},
-        )
-        await message.answer("Добавь комментарий или условия (можно пропустить, отправив '-'):")
+        await _handle_bank_selection(message, state, bank_name)
 
     @dp.message(F.text == emoji_button)
     async def handle_emoji(message: Message) -> None:
@@ -404,15 +503,39 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
     @dp.callback_query(F.data.startswith("bank::"))
     async def handle_bank_cb(call: CallbackQuery, state: FSMContext) -> None:
         bank_name = call.data.split("::", 1)[1]
-        await state.update_data(bank=bank_name)
-        await state.set_state(SubmissionForm.comment)
-        await database.add_action(
-            action="bank_selected",
-            user_id=call.from_user.id if call.from_user else None,
-            username=call.from_user.username if call.from_user else None,
-            details={"bank": bank_name},
+        await _handle_bank_selection(call, state, bank_name)
+        await call.answer()
+
+    @dp.callback_query(F.data.startswith("start_task::"))
+    async def handle_start_task(call: CallbackQuery, state: FSMContext) -> None:
+        bank_name = call.data.split("::", 1)[1]
+        info = _special_banks().get(bank_name)
+        if not info:
+            await call.answer()
+            return
+        text = _instruction_text(info["name"], info["link"], info.get("custom"))
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="✅ Карта заказана", callback_data="card_ordered")],
+                [InlineKeyboardButton(text="❌ Отказаться от выполнения", callback_data="refuse_task")],
+            ]
         )
-        await call.message.answer("Добавь комментарий или условия (можно пропустить, отправив '-'):")
+        await _send_menu(call, state, text, reply_markup=kb)
+        await call.answer()
+
+    @dp.callback_query(F.data == "refuse_task")
+    async def handle_refuse_task(call: CallbackQuery, state: FSMContext) -> None:
+        await _show_banks_by_age(state, call)
+        await call.answer()
+
+    @dp.callback_query(F.data == "card_ordered")
+    async def handle_card_ordered(call: CallbackQuery, state: FSMContext) -> None:
+        await _send_menu(
+            call,
+            state,
+            "✅После получения карты, нажмите кнопку \"Получил карту\" в главном меню, и мы с вами свяжемся!",
+            reply_markup=main_menu_reply,
+        )
         await call.answer()
 
     @dp.callback_query(F.data.startswith("switch_age::"))
@@ -445,19 +568,19 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
             details={},
         )
         await state.set_state(SupportForm.question)
-        await call.message.answer("Напиши свой вопрос или отправь файл/скрин. После отправки вопрос будет сохранен для админов.", reply_markup=cancel_support_keyboard)
+        await _send_menu(call, state, "Напиши свой вопрос или отправь файл/скрин. После отправки вопрос будет сохранен для админов.", reply_markup=cancel_support_keyboard)
         await call.answer()
 
     @dp.callback_query(F.data == "start_support")
     async def handle_start_support(call: CallbackQuery, state: FSMContext) -> None:
         await state.set_state(SupportForm.question)
-        await call.message.answer("Напиши свой вопрос или отправь файл/скрин. Можно отменить кнопкой ниже.", reply_markup=cancel_support_keyboard)
+        await _send_menu(call, state, "Напиши свой вопрос или отправь файл/скрин. Можно отменить кнопкой ниже.", reply_markup=cancel_support_keyboard)
         await call.answer()
 
     @dp.callback_query(F.data == "start_report_message")
     async def handle_start_report_message(call: CallbackQuery, state: FSMContext) -> None:
         await state.set_state(ReportForm.report)
-        await call.message.answer("Опиши получение карты или отправь скрин. Можно отменить кнопкой ниже.", reply_markup=cancel_report_keyboard)
+        await _send_menu(call, state, "Опиши получение карты или отправь скрин. Можно отменить кнопкой ниже.", reply_markup=cancel_report_keyboard)
         await call.answer()
 
     @dp.callback_query(F.data == "go_main")
@@ -475,6 +598,11 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
     async def handle_cancel_report(call: CallbackQuery, state: FSMContext) -> None:
         await clear_state_keep_age(state)
         await show_tasks_or_main(call, state)
+
+    @dp.callback_query(F.data == "back_to_banks")
+    async def handle_back_to_banks(call: CallbackQuery, state: FSMContext) -> None:
+        await _show_banks_by_age(state, call)
+        await call.answer()
 
     def _profile_text(obj) -> str:
         u = obj.from_user if isinstance(obj, CallbackQuery) else obj.from_user
