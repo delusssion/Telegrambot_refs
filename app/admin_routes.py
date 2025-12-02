@@ -3,7 +3,7 @@ import hmac
 from pathlib import Path
 from typing import Optional, Tuple, List
 
-from fastapi import APIRouter, Cookie, Depends, Form, Header, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, Form, Header, HTTPException, Response, status, Body
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 from .config import Settings
@@ -98,7 +98,11 @@ def build_admin_router(
         return {"items": items, "limit": limit}
 
     @router.post("/questions/{question_id}/reply")
-    async def reply_question(question_id: int, message: str, auth: None = Auth) -> dict:
+    async def reply_question(
+        question_id: int,
+        message: str = Body("", embed=True),
+        auth: None = Auth,
+    ) -> dict:
         question = await database.get_question(question_id)
         if not question:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
@@ -118,7 +122,11 @@ def build_admin_router(
         return {"status": "ok"}
 
     @router.post("/reports/{report_id}/reply")
-    async def reply_report(report_id: int, message: str, auth: None = Auth) -> dict:
+    async def reply_report(
+        report_id: int,
+        message: str = Body("", embed=True),
+        auth: None = Auth,
+    ) -> dict:
         report = await database.get_report(report_id)
         if not report:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
@@ -138,7 +146,10 @@ def build_admin_router(
         return {"status": "ok"}
 
     @router.post("/broadcast")
-    async def broadcast(message: str, auth: None = Auth) -> dict:
+    async def broadcast(
+        message: str = Body("", embed=True),
+        auth: None = Auth,
+    ) -> dict:
         ids = await database.list_all_user_ids()
         sent = 0
         failed = 0
@@ -155,6 +166,22 @@ def build_admin_router(
             details={"message": message, "sent": sent, "failed": failed},
         )
         return {"status": "ok", "sent": sent, "failed": failed, "total": len(ids)}
+
+    @router.post("/cards")
+    async def add_card(
+        title: str = Body(..., embed=True),
+        payout: str = Body(..., embed=True),
+        note: str = Body("", embed=True),
+        auth: None = Auth,
+    ) -> dict:
+        # Сохраняем как действие для журналирования
+        await database.add_action(
+            action="card_added",
+            user_id=None,
+            username=None,
+            details={"title": title, "payout": payout, "note": note},
+        )
+        return {"status": "ok"}
 
     @router.get("/admin/login", include_in_schema=False)
     async def login_page() -> FileResponse:

@@ -124,71 +124,46 @@ function renderLogin() {
 function renderPanel() {
   root.innerHTML = `
     <section class="card">
-      <div class="panel-header">
-        <h2>Панель управления</h2>
+      <div class="panel-header top-bar">
+        <div>
+          <h2>Панель управления</h2>
+          <p class="muted small">Бот и веб-админка</p>
+        </div>
         <button class="secondary" id="logout-btn">Выйти</button>
       </div>
-      <div class="panel-block">
-        <div class="controls">
-          <div>
-            <label for="base-url">Базовый URL</label>
-            <input type="text" id="base-url" value="${state.baseUrl}" placeholder="https://yourdomain.com">
+
+      <div class="summary-grid panel-block">
+        <div>
+          <div class="panel-header">
+            <h3>Пользователи</h3>
+            <button class="secondary" id="refresh-all">Обновить</button>
           </div>
-          <div>
-            <label for="limit">Лимит записей</label>
-            <input type="number" id="limit" min="1" max="500" value="${state.limit}">
+          <div class="stats-row">
+            <div class="stat-card">
+              <div class="stat-label">ВСЕГО</div>
+              <div class="stat-value" id="stat-users-all">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">ЗА НЕДЕЛЮ</div>
+              <div class="stat-value" id="stat-users-week">—</div>
+            </div>
           </div>
         </div>
-      <div class="panel-header">
-        <h3>Заявки</h3>
-      </div>
-      <div id="subs-status" class="muted"></div>
-      <div class="table-wrap">
-        <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Пользователь</th>
-                <th>Банк</th>
-                <th>Комментарий</th>
-                <th>Статус</th>
-                <th>Создано</th>
-              </tr>
-            </thead>
-            <tbody id="subs-body"></tbody>
-          </table>
+        <div class="settings">
+          <label for="base-url">Базовый URL</label>
+          <input type="text" id="base-url" value="${state.baseUrl}" placeholder="https://yourdomain.com">
+          <label for="limit">Лимит записей</label>
+          <input type="number" id="limit" min="1" max="500" value="${state.limit}">
         </div>
       </div>
 
       <div class="panel-block">
         <div class="panel-header">
-          <h3>Последние действия</h3>
-        </div>
-        <div id="actions-status" class="muted"></div>
-        <ul id="actions-list" class="logs"></ul>
-      </div>
-
-      <div class="panel-block">
-        <div class="panel-header">
-          <h3>Вопросы пользователей</h3>
+          <h3>Вопросы админам</h3>
           <button class="secondary" id="load-questions">Обновить</button>
         </div>
         <div id="questions-status" class="muted"></div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Пользователь</th>
-                <th>Сообщение</th>
-                <th>Файл</th>
-                <th>Время</th>
-                <th>Ответ</th>
-              </tr>
-            </thead>
-            <tbody id="questions-body"></tbody>
-          </table>
-        </div>
+        <div class="cards-grid" id="questions-cards"></div>
       </div>
 
       <div class="panel-block">
@@ -197,21 +172,23 @@ function renderPanel() {
           <button class="secondary" id="load-reports">Обновить</button>
         </div>
         <div id="reports-status" class="muted"></div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Пользователь</th>
-                <th>Текст</th>
-                <th>Файл</th>
-                <th>Время</th>
-                <th>Ответ</th>
-              </tr>
-            </thead>
-            <tbody id="reports-body"></tbody>
-          </table>
+        <div class="cards-grid" id="reports-cards"></div>
+      </div>
+
+      <div class="panel-block">
+        <div class="panel-header">
+          <h3>Добавить карту</h3>
         </div>
+        <form id="card-form">
+          <label for="card-title">Название карты</label>
+          <input type="text" id="card-title" placeholder="Например, Карта Альфа" required>
+          <label for="card-payout">Выплата</label>
+          <input type="text" id="card-payout" placeholder="Например, 500 ₽" required>
+          <label for="card-note">Комментарий</label>
+          <textarea id="card-note" rows="2" placeholder="Доп. условия (необязательно)"></textarea>
+          <button type="submit">Добавить задание</button>
+          <div id="card-status" class="muted"></div>
+        </form>
       </div>
 
       <div class="panel-block">
@@ -247,9 +224,16 @@ function renderPanel() {
     setLimit(n);
   });
 
+  document.getElementById("refresh-all").addEventListener("click", () => {
+    loadSubmissions();
+    loadActions();
+    loadQuestions();
+    loadReports();
+  });
   document.getElementById("load-questions").addEventListener("click", loadQuestions);
   document.getElementById("load-reports").addEventListener("click", loadReports);
   document.getElementById("broadcast-form").addEventListener("submit", handleBroadcast);
+  document.getElementById("card-form").addEventListener("submit", handleAddCard);
 
   loadSubmissions();
   loadActions();
@@ -258,69 +242,67 @@ function renderPanel() {
 }
 
 async function loadSubmissions() {
-  const status = document.getElementById("subs-status");
-  const body = document.getElementById("subs-body");
-  status.textContent = "Загружаю...";
-  body.innerHTML = "";
+  const statusUsersAll = document.getElementById("stat-users-all");
+  const statusUsersWeek = document.getElementById("stat-users-week");
+  statusUsersAll.textContent = "—";
+  statusUsersWeek.textContent = "—";
   try {
     const data = await apiFetch(`/submissions?limit=${state.limit}`);
-    status.textContent = `Заявок: ${data.items.length}`;
-    data.items.forEach((item) => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${item.id}</td>
-        <td>${item.username || item.user_id || "—"}</td>
-        <td>${item.bank}</td>
-        <td>${item.comment || "—"}</td>
-        <td><span class="pill">${item.status}</span></td>
-        <td>${item.created_at}</td>
-      `;
-      body.appendChild(tr);
-    });
+    const uniqueUsers = new Set(data.items.map((i) => i.user_id).filter(Boolean));
+    statusUsersAll.textContent = uniqueUsers.size || "0";
+
+    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const weekUsers = new Set(
+      data.items
+        .filter((i) => Date.parse(i.created_at) >= weekAgo)
+        .map((i) => i.user_id)
+        .filter(Boolean)
+    );
+    statusUsersWeek.textContent = weekUsers.size || "0";
   } catch (err) {
-    status.textContent = err.message;
+    statusUsersAll.textContent = "Ошибка";
+    statusUsersWeek.textContent = "Ошибка";
   }
 }
 
 async function loadActions() {
-  const status = document.getElementById("actions-status");
-  const list = document.getElementById("actions-list");
-  status.textContent = "Загружаю...";
-  list.innerHTML = "";
   try {
     const data = await apiFetch(`/actions?limit=${state.limit}`);
-    status.textContent = `Событий: ${data.items.length}`;
-    data.items.forEach((item) => {
-      const li = document.createElement("li");
-      li.textContent = `${item.created_at} — ${item.action} — user: ${item.username || item.user_id || "—"} — details: ${JSON.stringify(item.details || {})}`;
-      list.appendChild(li);
-    });
+    // можно отрисовать при необходимости
   } catch (err) {
-    status.textContent = err.message;
+    // ignore
   }
 }
 
 async function loadQuestions() {
   const status = document.getElementById("questions-status");
-  const body = document.getElementById("questions-body");
+  const container = document.getElementById("questions-cards");
   status.textContent = "Загружаю...";
-  body.innerHTML = "";
+  container.innerHTML = "";
   try {
     const data = await apiFetch(`/questions?limit=${state.limit}`);
     status.textContent = `Вопросов: ${data.items.length}`;
+    if (!data.items.length) {
+      container.innerHTML = `<p class="muted">Нет вопросов.</p>`;
+      return;
+    }
     data.items.forEach((item) => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${item.id}</td>
-        <td>${item.username || item.user_id || "—"}</td>
-        <td>${item.message || "—"}</td>
-        <td>${item.file_id || "—"}</td>
-        <td>${item.created_at}</td>
-        <td><button data-id="${item.id}" class="secondary reply-question">Ответить</button></td>
+      const card = document.createElement("div");
+      card.className = "mini-card";
+      card.innerHTML = `
+        <div class="mini-title">#${item.id} · ${item.username || item.user_id || "—"}</div>
+        <div class="mini-body">${item.message || "—"}</div>
+        <div class="mini-meta">
+          <span>${item.created_at}</span>
+          <span>${item.file_id || ""}</span>
+        </div>
+        <div class="mini-actions">
+          <button data-id="${item.id}" class="secondary reply-question">Ответить</button>
+        </div>
       `;
-      body.appendChild(tr);
+      container.appendChild(card);
     });
-    body.querySelectorAll(".reply-question").forEach((btn) => {
+    container.querySelectorAll(".reply-question").forEach((btn) => {
       btn.addEventListener("click", async (e) => {
         const id = e.target.dataset.id;
         const text = prompt("Введите ответ пользователю:");
@@ -331,6 +313,7 @@ async function loadQuestions() {
             body: JSON.stringify({ message: text }),
           });
           showMessage("Ответ отправлен.");
+          loadActions();
         } catch (err) {
           showMessage(err.message);
         }
@@ -343,25 +326,33 @@ async function loadQuestions() {
 
 async function loadReports() {
   const status = document.getElementById("reports-status");
-  const body = document.getElementById("reports-body");
+  const container = document.getElementById("reports-cards");
   status.textContent = "Загружаю...";
-  body.innerHTML = "";
+  container.innerHTML = "";
   try {
     const data = await apiFetch(`/reports?limit=${state.limit}`);
     status.textContent = `Отчетов: ${data.items.length}`;
+    if (!data.items.length) {
+      container.innerHTML = `<p class="muted">Нет отчетов.</p>`;
+      return;
+    }
     data.items.forEach((item) => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${item.id}</td>
-        <td>${item.username || item.user_id || "—"}</td>
-        <td>${item.message || "—"}</td>
-        <td>${item.file_id || "—"}</td>
-        <td>${item.created_at}</td>
-        <td><button data-id="${item.id}" class="secondary reply-report">Ответить</button></td>
+      const card = document.createElement("div");
+      card.className = "mini-card";
+      card.innerHTML = `
+        <div class="mini-title">#${item.id} · ${item.username || item.user_id || "—"}</div>
+        <div class="mini-body">${item.message || "—"}</div>
+        <div class="mini-meta">
+          <span>${item.created_at}</span>
+          <span>${item.file_id || ""}</span>
+        </div>
+        <div class="mini-actions">
+          <button data-id="${item.id}" class="secondary reply-report">Ответить</button>
+        </div>
       `;
-      body.appendChild(tr);
+      container.appendChild(card);
     });
-    body.querySelectorAll(".reply-report").forEach((btn) => {
+    container.querySelectorAll(".reply-report").forEach((btn) => {
       btn.addEventListener("click", async (e) => {
         const id = e.target.dataset.id;
         const text = prompt("Введите ответ по отчету:");
@@ -372,6 +363,7 @@ async function loadReports() {
             body: JSON.stringify({ message: text }),
           });
           showMessage("Ответ отправлен.");
+          loadActions();
         } catch (err) {
           showMessage(err.message);
         }
@@ -379,6 +371,30 @@ async function loadReports() {
     });
   } catch (err) {
     status.textContent = err.message;
+  }
+}
+
+async function handleAddCard(event) {
+  event.preventDefault();
+  const title = document.getElementById("card-title").value.trim();
+  const payout = document.getElementById("card-payout").value.trim();
+  const note = document.getElementById("card-note").value.trim();
+  const status = document.getElementById("card-status");
+  if (!title || !payout) {
+    showMessage("Укажите название и выплату.");
+    return;
+  }
+  status.textContent = "Сохраняю...";
+  try {
+    await apiFetch("/cards", {
+      method: "POST",
+      body: JSON.stringify({ title, payout, note }),
+    });
+    status.textContent = "Сохранено.";
+    document.getElementById("card-form").reset();
+  } catch (err) {
+    status.textContent = err.message;
+    showMessage(err.message);
   }
 }
 
