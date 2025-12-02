@@ -175,7 +175,7 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         sent = await msg_obj.answer(text, reply_markup=reply_markup)
         await state.update_data(menu_msg_id=sent.message_id)
 
-    def _instruction_text(bank_name: str, link: str, custom: str | None = None) -> str:
+    def _instruction_text(bank_name: str, link: str, custom: Optional[str] = None) -> str:
         if custom == "tbank":
             return (
                 f"▌ Шаг 1: Переход по <a href=\"{link}\">реферальной ссылке</a>\n\n"
