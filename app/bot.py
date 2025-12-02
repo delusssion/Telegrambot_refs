@@ -62,7 +62,6 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
     age_14_button = "🧒 14+"
     age_18_button = "🔞 18+"
     other_tasks_button = "➕ Остальные задания"
-    show_18_button = "🔞 Отобразить карты 18+"
     emoji_button = "😊"
     bank_14_buttons = [
         "💳 Карта Т-Банк 1ООО Р",
@@ -147,23 +146,33 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         if age:
             await state.update_data(preferred_age=age)
 
+    async def _send_menu(obj, state: FSMContext, text: str, reply_markup=None):
+        # удаляем предыдущее меню, если было
+        data = await state.get_data()
+        last_id = data.get("menu_msg_id")
+        msg_obj = obj.message if isinstance(obj, CallbackQuery) else obj
+        chat_id = msg_obj.chat.id
+        if last_id:
+            try:
+                await msg_obj.bot.delete_message(chat_id=chat_id, message_id=last_id)
+            except Exception:
+                pass
+        sent = await msg_obj.answer(text, reply_markup=reply_markup)
+        await state.update_data(menu_msg_id=sent.message_id)
+
     async def show_tasks_or_main(obj, state: FSMContext) -> None:
         data = await state.get_data()
         preferred_age = data.get("preferred_age")
         if preferred_age:
             prompt = f"Доступные задания для {preferred_age}:"
             kb = banks_inline_keyboard(preferred_age)
+            await _send_menu(obj, state, prompt, reply_markup=kb)
             if isinstance(obj, CallbackQuery):
-                await obj.message.answer(prompt, reply_markup=kb)
                 await obj.answer()
-            else:
-                await obj.answer(prompt, reply_markup=kb)
         else:
+            await _send_menu(obj, state, "Главное меню:", reply_markup=main_menu_reply)
             if isinstance(obj, CallbackQuery):
-                await obj.message.answer("Главное меню:", reply_markup=main_menu_reply)
                 await obj.answer()
-            else:
-                await obj.answer("Главное меню:", reply_markup=main_menu_reply)
 
     def age_inline_keyboard() -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
@@ -182,8 +191,6 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         rows = [[InlineKeyboardButton(text=btn, callback_data=f"bank::{btn}")] for btn in buttons]
         rows.append([InlineKeyboardButton(text=emoji_button, callback_data="emoji")])
         rows.append([InlineKeyboardButton(text=other_tasks_button, callback_data="other_tasks")])
-        if age_label == "14+":
-            rows.append([InlineKeyboardButton(text=show_18_button, callback_data="show_18")])
         rows.append([InlineKeyboardButton(text=ask_button, callback_data="ask")])
         rows.append([InlineKeyboardButton(text=f"🔄 Показать задания {other_age}", callback_data=f"switch_age::{other_age}")])
         return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -329,11 +336,9 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         )
         kb = banks_inline_keyboard(age_label)
         prompt = "Доступные задания для 14+:" if age_label == "14+" else "Доступные задания для 18+:"
+        await _send_menu(message_obj, state, prompt, reply_markup=kb)
         if isinstance(message_obj, CallbackQuery):
-            await message_obj.message.answer(prompt, reply_markup=kb)
             await message_obj.answer()
-        else:
-            await message_obj.answer(prompt, reply_markup=kb)
 
     @dp.message(F.text == age_14_button)
     async def handle_age_14(message: Message, state: FSMContext) -> None:
@@ -384,10 +389,6 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
     async def handle_other_tasks(message: Message) -> None:
         await message.answer("Скоро добавим новые задания. Пока выбери из доступных или задай вопрос.")
 
-    @dp.message(F.text == show_18_button)
-    async def handle_show_18(message: Message, state: FSMContext) -> None:
-        await _store_age_and_show("18+", message, state)
-
     @dp.message(F.text == tasks_button)
     async def handle_tasks_menu(message: Message, state: FSMContext) -> None:
         await _show_tasks(message, state)
@@ -435,10 +436,6 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         await call.message.answer("Скоро добавим новые задания. Пока выбери из доступных или задай вопрос.")
         await call.answer()
 
-    @dp.callback_query(F.data == "show_18")
-    async def handle_show_18_cb(call: CallbackQuery, state: FSMContext) -> None:
-        await _store_age_and_show("18+", call, state)
-
     @dp.callback_query(F.data == "ask")
     async def handle_ask_cb(call: CallbackQuery, state: FSMContext) -> None:
         await database.add_action(
@@ -466,7 +463,7 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
     @dp.callback_query(F.data == "go_main")
     async def handle_go_main(call: CallbackQuery, state: FSMContext) -> None:
         await clear_state_keep_age(state)
-        await call.message.answer("Главное меню:", reply_markup=main_menu_reply)
+        await _send_menu(call, state, "Главное меню:", reply_markup=main_menu_reply)
         await call.answer()
 
     @dp.callback_query(F.data == "cancel_support")
@@ -617,11 +614,9 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         data = await state.get_data()
         preferred_age = data.get("preferred_age")
         if preferred_age:
-            await call.message.answer(
-                f"Доступные задания для {preferred_age}:", reply_markup=banks_inline_keyboard(preferred_age)
-            )
+            await _send_menu(call, state, f"Доступные задания для {preferred_age}:", reply_markup=banks_inline_keyboard(preferred_age))
         else:
-            await call.message.answer("Выберите ваш возраст:", reply_markup=age_inline_keyboard())
+            await _send_menu(call, state, "Выберите ваш возраст:", reply_markup=age_inline_keyboard())
         await call.answer()
 
     @dp.callback_query(F.data == "menu_reviews")

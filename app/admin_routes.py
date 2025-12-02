@@ -170,6 +170,7 @@ def build_admin_router(
     @router.post("/cards")
     async def add_card(
         title: str = Body(..., embed=True),
+        category: str = Body(..., embed=True),
         payout: str = Body(..., embed=True),
         note: str = Body("", embed=True),
         auth: None = Auth,
@@ -179,7 +180,7 @@ def build_admin_router(
             action="card_added",
             user_id=None,
             username=None,
-            details={"title": title, "payout": payout, "note": note},
+            details={"title": title, "category": category, "payout": payout, "note": note},
         )
         return {"status": "ok"}
 

@@ -182,6 +182,11 @@ function renderPanel() {
         <form id="card-form">
           <label for="card-title">Название карты</label>
           <input type="text" id="card-title" placeholder="Например, Карта Альфа" required>
+          <label for="card-category">Категория</label>
+          <select id="card-category">
+            <option value="14+">14+</option>
+            <option value="18+">18+</option>
+          </select>
           <label for="card-payout">Выплата</label>
           <input type="text" id="card-payout" placeholder="Например, 500 ₽" required>
           <label for="card-note">Комментарий</label>
@@ -393,6 +398,7 @@ async function loadReports() {
 async function handleAddCard(event) {
   event.preventDefault();
   const title = document.getElementById("card-title").value.trim();
+  const category = document.getElementById("card-category").value;
   const payout = document.getElementById("card-payout").value.trim();
   const note = document.getElementById("card-note").value.trim();
   const status = document.getElementById("card-status");
@@ -404,7 +410,7 @@ async function handleAddCard(event) {
   try {
     await apiFetch("/cards", {
       method: "POST",
-      body: JSON.stringify({ title, payout, note }),
+      body: JSON.stringify({ title, category, payout, note }),
     });
     status.textContent = "Сохранено.";
     document.getElementById("card-form").reset();

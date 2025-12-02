@@ -41,7 +41,7 @@ footer p { margin: 0; font-size: 0.85rem; }
 .card h2 { margin-top: 0; font-weight: 600; color: #f7fbff; }
 label { display: block; font-weight: 600; margin: 16px 0 10px; color: #a8bcf1; letter-spacing: 0.02em; }
 
-input, textarea {
+input, textarea, select {
     width: 100%; padding: 12px 14px;
     border: 1px solid rgba(120, 150, 255, 0.25);
     border-radius: 12px;
