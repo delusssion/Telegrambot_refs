@@ -370,6 +370,7 @@ async function loadReports() {
         </div>
         <div class="mini-actions">
           <button data-id="${item.id}" class="secondary reply-report">Ответить</button>
+          <button data-id="${item.id}" class="danger reject-report">Отклонить</button>
         </div>
       `;
       container.appendChild(card);
@@ -386,6 +387,20 @@ async function loadReports() {
           });
           showMessage("Ответ отправлен.");
           e.target.closest(".mini-card")?.remove();
+          loadActions();
+        } catch (err) {
+          showMessage(err.message);
+        }
+      });
+    });
+    container.querySelectorAll(".reject-report").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        const id = e.target.dataset.id;
+        if (!confirm("Отклонить отчет и убрать из списка?")) return;
+        try {
+          await apiFetch(`/reports/${id}/reject`, { method: "POST" });
+          e.target.closest(".mini-card")?.remove();
+          showMessage("Отклонено.");
           loadActions();
         } catch (err) {
           showMessage(err.message);

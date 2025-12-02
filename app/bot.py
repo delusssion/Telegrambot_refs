@@ -456,6 +456,15 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
             )
             await _send_menu(obj, state, text, reply_markup=kb)
             return
+        if bank_name.startswith("💳 Карта МТС"):
+            text = "Скоро добавим инструкцию для МТС Банка..."
+            kb = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_banks")],
+                ]
+            )
+            await _send_menu(obj, state, text, reply_markup=kb)
+            return
 
         await state.update_data(bank=bank_name)
         await state.set_state(SubmissionForm.comment)

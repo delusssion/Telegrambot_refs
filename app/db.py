@@ -264,6 +264,14 @@ class Database:
         finally:
             await db.close()
 
+    async def delete_report(self, report_id: int) -> None:
+        db = await self.connect()
+        try:
+            await db.execute("DELETE FROM reports WHERE id = ?", (report_id,))
+            await db.commit()
+        finally:
+            await db.close()
+
     async def get_report(self, report_id: int) -> Optional[Dict[str, Any]]:
         db = await self.connect()
         try:

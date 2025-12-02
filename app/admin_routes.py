@@ -143,6 +143,7 @@ def build_admin_router(
             username=report.get("username"),
             details={"report_id": report_id, "message": message},
         )
+        await database.delete_report(report_id)
         return {"status": "ok"}
 
     @router.post("/broadcast")
@@ -192,6 +193,17 @@ def build_admin_router(
             user_id=None,
             username=None,
             details={"question_id": question_id},
+        )
+        return {"status": "ok"}
+
+    @router.post("/reports/{report_id}/reject")
+    async def reject_report(report_id: int, auth: None = Auth) -> dict:
+        await database.delete_report(report_id)
+        await database.add_action(
+            action="report_rejected",
+            user_id=None,
+            username=None,
+            details={"report_id": report_id},
         )
         return {"status": "ok"}
 
