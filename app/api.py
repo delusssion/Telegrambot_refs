@@ -1,7 +1,6 @@
 import hashlib
 import hmac
 from pathlib import Path
-from typing import Annotated, Optional
 
 from fastapi import Cookie, Depends, FastAPI, Form, Header, HTTPException, Response, status
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
@@ -40,7 +39,7 @@ def create_api(settings: Settings, database: Database) -> FastAPI:
         digest = hmac.new(secret, user_id.encode(), hashlib.sha256).hexdigest()
         return f"{user_id}.{digest}"
 
-    def _verify_session(raw: str | None) -> Optional[str]:
+    def _verify_session(raw: str = None):
         if not raw:
             return None
         try:
@@ -53,8 +52,8 @@ def create_api(settings: Settings, database: Database) -> FastAPI:
         return None
 
     async def verify_admin(
-        x_api_key: Annotated[str | None, Header()] = None,
-        session: Annotated[str | None, Cookie()] = None,
+        x_api_key=Header(default=None),
+        session=Cookie(default=None),
     ) -> None:
         # Allow header key if set
         if settings.api_key and x_api_key == settings.api_key:
@@ -68,7 +67,7 @@ def create_api(settings: Settings, database: Database) -> FastAPI:
 
     Auth = Depends(verify_admin)
 
-    async def verify_key(x_api_key: Annotated[str | None, Header()] = None) -> None:
+    async def verify_key(x_api_key=Header(default=None)) -> None:
         if settings.api_key is None:
             return
         if x_api_key != settings.api_key:
