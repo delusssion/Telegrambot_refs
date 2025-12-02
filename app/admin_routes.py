@@ -221,16 +221,13 @@ def build_admin_router(
 
     @router.get("/admin", include_in_schema=False)
     async def admin_page(auth: None = Auth) -> FileResponse:
-        admin_file = static_dir / "admin.html"
-        if not admin_file.exists():
+        panel_file = admin_panel_dir / "index.html"
+        if not panel_file.exists():
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Admin page not found")
-        return FileResponse(admin_file)
+        return FileResponse(panel_file)
 
     @router.get("/admin/panel", include_in_schema=False)
     async def admin_panel(auth: None = Auth) -> FileResponse:
-        panel_file = admin_panel_dir / "index.html"
-        if not panel_file.exists():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Admin panel not found")
-        return FileResponse(panel_file)
+        return await admin_page(auth=auth)
 
     return router
