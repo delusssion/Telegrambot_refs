@@ -97,6 +97,12 @@ def build_admin_router(
         items = await database.list_reports(limit=limit)
         return {"items": items, "limit": limit}
 
+    @router.get("/stats/users")
+    async def stats_users(auth: None = Auth) -> dict:
+        total = await database.count_users_all()
+        week = await database.count_users_last_week()
+        return {"total": total, "week": week}
+
     @router.post("/questions/{question_id}/reply")
     async def reply_question(
         question_id: int,

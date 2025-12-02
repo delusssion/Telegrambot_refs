@@ -252,18 +252,9 @@ async function loadSubmissions() {
   statusUsersAll.textContent = "—";
   statusUsersWeek.textContent = "—";
   try {
-    const data = await apiFetch(`/submissions?limit=1000`);
-    const uniqueUsers = new Set((data.items || []).map((i) => i.user_id).filter(Boolean));
-    statusUsersAll.textContent = uniqueUsers.size || "0";
-
-    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    const weekUsers = new Set(
-      (data.items || [])
-        .filter((i) => Date.parse(i.created_at) >= weekAgo)
-        .map((i) => i.user_id)
-        .filter(Boolean)
-    );
-    statusUsersWeek.textContent = weekUsers.size || "0";
+    const data = await apiFetch(`/stats/users`);
+    statusUsersAll.textContent = data.total ?? "0";
+    statusUsersWeek.textContent = data.week ?? "0";
   } catch (err) {
     statusUsersAll.textContent = "Ошибка";
     statusUsersWeek.textContent = "Ошибка";

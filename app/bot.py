@@ -63,13 +63,13 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
     other_tasks_button = "➕ Остальные задания"
     emoji_button = "😊"
     bank_14_buttons = [
-        "💳 Карта Т-Банк 1ООО Р",
-        "💳 Карта Альфа Банк 5ОО Р",
+        "💳 Карта Т-Банк 3ООО Р",
+        "💳 Карта Альфа Банк 2ООО Р",
     ]
     bank_18_buttons = [
-        "💳 Карта Т-Банк 1ООО Р",
+        "💳 Карта Т-Банк 3ООО Р",
         "💳 Карта МТС 3ОО Р",
-        "💳 Карта Альфа Банк 5ОО Р",
+        "💳 Карта Альфа Банк 2ООО Р",
     ]
     next_keyboard = InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text=next_button_text, callback_data="next_submit")]]

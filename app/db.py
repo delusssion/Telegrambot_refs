@@ -344,3 +344,48 @@ class Database:
             return [row[0] for row in rows if row[0] is not None]
         finally:
             await db.close()
+
+    async def count_users_all(self) -> int:
+        db = await self.connect()
+        try:
+            cursor = await db.execute(
+                """
+                SELECT COUNT(DISTINCT user_id) FROM (
+                    SELECT user_id, created_at FROM submissions
+                    UNION ALL
+                    SELECT user_id, created_at FROM actions
+                    UNION ALL
+                    SELECT user_id, created_at FROM questions
+                    UNION ALL
+                    SELECT user_id, created_at FROM reports
+                )
+                WHERE user_id IS NOT NULL
+                """
+            )
+            row = await cursor.fetchone()
+            return row[0] if row and row[0] is not None else 0
+        finally:
+            await db.close()
+
+    async def count_users_last_week(self) -> int:
+        db = await self.connect()
+        try:
+            cursor = await db.execute(
+                """
+                SELECT COUNT(DISTINCT user_id) FROM (
+                    SELECT user_id, created_at FROM submissions
+                    UNION ALL
+                    SELECT user_id, created_at FROM actions
+                    UNION ALL
+                    SELECT user_id, created_at FROM questions
+                    UNION ALL
+                    SELECT user_id, created_at FROM reports
+                )
+                WHERE user_id IS NOT NULL
+                  AND created_at >= datetime('now', '-7 day')
+                """
+            )
+            row = await cursor.fetchone()
+            return row[0] if row and row[0] is not None else 0
+        finally:
+            await db.close()
