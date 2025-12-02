@@ -147,11 +147,11 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
 
     def _special_banks():
         return {
-            "💳 Карта Альфа Банк 5ОО Р": {
+            "💳 Карта Альфа Банк 2ООО Р": {
                 "name": "Альфа-Банк",
                 "link": "https://alfa.me/fwXuQ3",
             },
-            "💳 Карта Т-Банк 1ООО Р": {
+            "💳 Карта Т-Банк 3ООО Р": {
                 "name": "Т-Банк",
                 "link": "https://tbank.ru/baf/1BgRcSNOGAp",
                 "custom": "tbank",
