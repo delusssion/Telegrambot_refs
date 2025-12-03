@@ -74,6 +74,8 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
 
     bank_14_keys = ["tbank", "alpha"]
     bank_18_keys = ["tbank", "mts", "alpha"]
+    bank_14_buttons = [BANKS_INFO[k]["display"] for k in bank_14_keys]
+    bank_18_buttons = [BANKS_INFO[k]["display"] for k in bank_18_keys]
     next_keyboard = InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text=next_button_text, callback_data="next_submit")]]
     )
