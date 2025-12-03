@@ -83,7 +83,7 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
 
     start_report_keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="✉️ Написать сообщение", callback_data="start_report_message")],
+            [InlineKeyboardButton(text="✅ Подтвердить получение", callback_data="start_report_message")],
             [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_report")],
         ]
     )
@@ -588,7 +588,17 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
     @dp.callback_query(F.data == "start_report_message")
     async def handle_start_report_message(call: CallbackQuery, state: FSMContext) -> None:
         await state.set_state(ReportForm.report)
-        await _send_menu(call, state, "Опиши получение карты или отправь скрин. Можно отменить кнопкой ниже.", reply_markup=cancel_report_keyboard)
+        await _send_menu(
+            call,
+            state,
+            "👉Если УЖЕ получил карту\n"
+            "👉Нажмите на кнопку ниже и отправьте\n"
+            "_________________________________\n"
+            "1️⃣Скриншот заказа карты с сайта\n"
+            "2️⃣Название банка карты, который заказали\n"
+            "3️⃣Номер телефона на который заказали карту, для выплаты",
+            reply_markup=cancel_report_keyboard,
+        )
         await call.answer()
 
     @dp.callback_query(F.data == "go_main")
@@ -697,7 +707,12 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         )
         await clear_state_keep_age(state)
         await message.answer(
-            "Сообщи о получении карты. Нажми «✉️ Написать сообщение», затем отправь текст или скрин.",
+            "👉Если УЖЕ получил карту\n"
+            "👉Нажмите на кнопку ниже и отправьте\n"
+            "_________________________________\n"
+            "1️⃣Скриншот заказа карты с сайта\n"
+            "2️⃣Название банка карты, который заказали\n"
+            "3️⃣Номер телефона на который заказали карту, для выплаты",
             reply_markup=start_report_keyboard,
         )
 
@@ -740,7 +755,12 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         )
         await clear_state_keep_age(state)
         await call.message.answer(
-            "Сообщи о получении карты. Нажми «✉️ Написать сообщение», затем отправь текст или скрин.",
+            "👉Если УЖЕ получил карту\n"
+            "👉Нажмите на кнопку ниже и отправьте\n"
+            "_________________________________\n"
+            "1️⃣Скриншот заказа карты с сайта\n"
+            "2️⃣Название банка карты, который заказали\n"
+            "3️⃣Номер телефона на который заказали карту, для выплаты",
             reply_markup=start_report_keyboard,
         )
         await call.answer()
