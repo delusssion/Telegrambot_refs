@@ -62,14 +62,17 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
     age_18_button = "🔞 18+"
     other_tasks_button = "➕ Остальные задания"
     emoji_button = "😊"
+    old_alpha_price = "2\u03360\u03360\u03360\u0336"  # 2000 with strikethrough
+    alpha_button = f"💳 Карта Альфа Банк {old_alpha_price} Р 2500 Р"
+    tbank_button = "💳 Карта Т-Банк 3ООО Р"
     bank_14_buttons = [
-        "💳 Карта Т-Банк 3ООО Р",
-        "💳 Карта Альфа Банк ~2ООО Р~ 25ОО Р",
+        tbank_button,
+        alpha_button,
     ]
     bank_18_buttons = [
-        "💳 Карта Т-Банк 3ООО Р",
+        tbank_button,
         "💳 Карта МТС 3ОО Р",
-        "💳 Карта Альфа Банк ~2ООО Р~ 25ОО Р",
+        alpha_button,
     ]
     next_keyboard = InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text=next_button_text, callback_data="next_submit")]]
@@ -147,12 +150,12 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
 
     def _special_banks():
         return {
-            "💳 Карта Альфа Банк ~2ООО Р~ 25ОО Р": {
+            alpha_button: {
                 "name": "Альфа-Банк",
                 "link": "https://alfa.me/aw4D3D",
                 "custom": "alpha",
             },
-            "💳 Карта Т-Банк 3ООО Р": {
+            tbank_button: {
                 "name": "Т-Банк",
                 "link": "https://tbank.ru/baf/1BgRcSNOGAp",
                 "custom": "tbank",
