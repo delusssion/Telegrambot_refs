@@ -62,18 +62,18 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
     age_18_button = "🔞 18+"
     other_tasks_button = "➕ Остальные задания"
     emoji_button = "😊"
-    old_alpha_price = "2\u03360\u03360\u03360\u0336"  # 2000 with strikethrough
-    alpha_button = f"💳 Карта Альфа Банк {old_alpha_price} Р 2500 Р"
-    tbank_button = "💳 Карта Т-Банк 3ООО Р"
-    bank_14_buttons = [
-        tbank_button,
-        alpha_button,
-    ]
-    bank_18_buttons = [
-        tbank_button,
-        "💳 Карта МТС 3ОО Р",
-        alpha_button,
-    ]
+    alpha_display = "💳 Карта Альфа Банк ~~2000 Р~~ 2500 Р"
+    tbank_display = "💳 Карта Т-Банк 3ООО Р"
+    mts_display = "💳 Карта МТС 3ОО Р"
+
+    BANKS_INFO = {
+        "alpha": {"display": alpha_display, "name": "Альфа-Банк", "link": "https://alfa.me/aw4D3D", "custom": "alpha"},
+        "tbank": {"display": tbank_display, "name": "Т-Банк", "link": "https://tbank.ru/baf/1BgRcSNOGAp", "custom": "tbank"},
+        "mts": {"display": mts_display, "name": "МТС Банк", "link": None},
+    }
+
+    bank_14_keys = ["tbank", "alpha"]
+    bank_18_keys = ["tbank", "mts", "alpha"]
     next_keyboard = InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text=next_button_text, callback_data="next_submit")]]
     )
@@ -149,18 +149,7 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
             await state.update_data(preferred_age=age)
 
     def _special_banks():
-        return {
-            alpha_button: {
-                "name": "Альфа-Банк",
-                "link": "https://alfa.me/aw4D3D",
-                "custom": "alpha",
-            },
-            tbank_button: {
-                "name": "Т-Банк",
-                "link": "https://tbank.ru/baf/1BgRcSNOGAp",
-                "custom": "tbank",
-            },
-        }
+        return {k: v for k, v in BANKS_INFO.items() if k in {"alpha", "tbank"}}
 
     async def _clear_menu_message(state: FSMContext, msg_obj) -> None:
         data = await state.get_data()
@@ -284,9 +273,14 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         )
 
     def banks_inline_keyboard(age_label: str) -> InlineKeyboardMarkup:
-        buttons = bank_14_buttons if age_label == "14+" else bank_18_buttons
+        keys = bank_14_keys if age_label == "14+" else bank_18_keys
         other_age = "18+" if age_label == "14+" else "14+"
-        rows = [[InlineKeyboardButton(text=btn, callback_data=f"bank::{btn}")] for btn in buttons]
+        rows = []
+        for key in keys:
+            info = BANKS_INFO.get(key)
+            if not info:
+                continue
+            rows.append([InlineKeyboardButton(text=info["display"], callback_data=f"bank::{key}")])
         rows.append([InlineKeyboardButton(text=emoji_button, callback_data="emoji")])
         rows.append([InlineKeyboardButton(text=other_tasks_button, callback_data="other_tasks")])
         rows.append([InlineKeyboardButton(text=ask_button, callback_data="ask")])
@@ -294,13 +288,12 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         return InlineKeyboardMarkup(inline_keyboard=rows)
 
     def all_banks_inline_keyboard() -> InlineKeyboardMarkup:
-        seen = set()
         rows = []
-        for btn in bank_14_buttons + bank_18_buttons:
-            if btn in seen:
+        for key in dict.fromkeys(bank_14_keys + bank_18_keys):
+            info = BANKS_INFO.get(key)
+            if not info:
                 continue
-            seen.add(btn)
-            rows.append([InlineKeyboardButton(text=btn, callback_data=f"bank::{btn}")])
+            rows.append([InlineKeyboardButton(text=info["display"], callback_data=f"bank::{key}")])
         rows.append([InlineKeyboardButton(text=ask_button, callback_data="ask")])
         return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -449,24 +442,24 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
             reply_markup=cancel_support_keyboard,
         )
 
-    async def _handle_bank_selection(obj, state: FSMContext, bank_name: str) -> None:
+    async def _handle_bank_selection(obj, state: FSMContext, bank_key: str) -> None:
+        info = BANKS_INFO.get(bank_key)
         special = _special_banks()
-        if bank_name in special:
-            info = special[bank_name]
+        if bank_key in special and info:
             text = (
-                f"{bank_name}\n\n"
+                f"{info['display']}\n\n"
                 f"Нажми «Начать выполнение», чтобы получить инструкцию. "
                 f"Если передумал — «Назад» вернет к списку карт."
             )
             kb = InlineKeyboardMarkup(
                 inline_keyboard=[
-                    [InlineKeyboardButton(text="🚀 Начать выполнение", callback_data=f"start_task::{bank_name}")],
+                    [InlineKeyboardButton(text="🚀 Начать выполнение", callback_data=f"start_task::{bank_key}")],
                     [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_banks")],
                 ]
             )
             await _send_menu(obj, state, text, reply_markup=kb)
             return
-        if bank_name.startswith("💳 Карта МТС"):
+        if bank_key == "mts":
             text = "Скоро добавим инструкцию для МТС Банка..."
             kb = InlineKeyboardMarkup(
                 inline_keyboard=[
@@ -476,21 +469,22 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
             await _send_menu(obj, state, text, reply_markup=kb)
             return
 
-        await state.update_data(bank=bank_name)
+        display = info["display"] if info else bank_key
+        await state.update_data(bank=display)
         await state.set_state(SubmissionForm.comment)
         u = _get_user_obj(obj)
         await database.add_action(
             action="bank_selected",
             user_id=u.id if u else None,
             username=u.username if u else None,
-            details={"bank": bank_name},
+            details={"bank": display},
         )
         await _send_menu(obj, state, "Добавь комментарий или условия (можно пропустить, отправив '-'):")
 
     @dp.message(F.text.in_(bank_14_buttons + bank_18_buttons))
     async def handle_bank_shortcut(message: Message, state: FSMContext) -> None:
-        bank_name = message.text.strip()
-        await _handle_bank_selection(message, state, bank_name)
+        bank_key = next((k for k, v in BANKS_INFO.items() if v["display"] == message.text.strip()), message.text.strip())
+        await _handle_bank_selection(message, state, bank_key)
 
     @dp.message(F.text == emoji_button)
     async def handle_emoji(message: Message) -> None:
@@ -520,14 +514,14 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
 
     @dp.callback_query(F.data.startswith("bank::"))
     async def handle_bank_cb(call: CallbackQuery, state: FSMContext) -> None:
-        bank_name = call.data.split("::", 1)[1]
-        await _handle_bank_selection(call, state, bank_name)
+        bank_key = call.data.split("::", 1)[1]
+        await _handle_bank_selection(call, state, bank_key)
         await call.answer()
 
     @dp.callback_query(F.data.startswith("start_task::"))
     async def handle_start_task(call: CallbackQuery, state: FSMContext) -> None:
-        bank_name = call.data.split("::", 1)[1]
-        info = _special_banks().get(bank_name)
+        bank_key = call.data.split("::", 1)[1]
+        info = _special_banks().get(bank_key)
         if not info:
             await call.answer()
             return
