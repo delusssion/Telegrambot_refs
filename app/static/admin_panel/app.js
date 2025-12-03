@@ -287,7 +287,7 @@ async function loadQuestions() {
       const card = document.createElement("div");
       card.className = "mini-card";
       const fileBlock = item.file_id
-        ? `<div class="mini-file"><a href="/file/${item.file_id}" target="_blank" rel="noreferrer">Открыть файл</a><br><img src="/file/${item.file_id}" class="thumb" alt=""></div>`
+        ? `<div class="mini-file"><img src="/file/${item.file_id}" class="thumb" alt="вложение"></div>`
         : `<div class="mini-file muted">Файл отсутствует</div>`;
       card.innerHTML = `
         <div class="mini-title">#${item.id} · ${item.username || item.user_id || "—"}</div>
@@ -356,7 +356,7 @@ async function loadReports() {
       const card = document.createElement("div");
       card.className = "mini-card";
       const fileBlock = item.file_id
-        ? `<div class="mini-file"><a href="/file/${item.file_id}" target="_blank" rel="noreferrer">Открыть файл</a><br><img src="/file/${item.file_id}" class="thumb" alt=""></div>`
+        ? `<div class="mini-file"><img src="/file/${item.file_id}" class="thumb" alt="вложение"></div>`
         : `<div class="mini-file muted">Файл отсутствует</div>`;
       card.innerHTML = `
         <div class="mini-title">#${item.id} · ${item.username || item.user_id || "—"}</div>

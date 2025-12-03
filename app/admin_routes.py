@@ -105,9 +105,25 @@ def build_admin_router(
 
     @router.get("/file/{file_id}", include_in_schema=False)
     async def get_file(file_id: str, auth: None = Auth):
-        f = await bot.get_file(file_id)
-        url = bot.session.api.file_url(f.file_path)
-        return RedirectResponse(url)
+        try:
+            f = await bot.get_file(file_id)
+        except Exception:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+        buffer = io.BytesIO()
+        try:
+            await bot.download_file(f.file_path, destination=buffer)
+        except Exception:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to download file")
+        suffix = Path(f.file_path).suffix.lower()
+        media_type = "application/octet-stream"
+        if suffix in {".jpg", ".jpeg"}:
+            media_type = "image/jpeg"
+        elif suffix in {".png"}:
+            media_type = "image/png"
+        elif suffix in {".gif"}:
+            media_type = "image/gif"
+        buffer.seek(0)
+        return StreamingResponse(buffer, media_type=media_type)
 
     @router.post("/questions/{question_id}/reply")
     async def reply_question(
