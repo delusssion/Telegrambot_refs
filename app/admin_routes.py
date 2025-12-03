@@ -103,6 +103,12 @@ def build_admin_router(
         week = await database.count_users_last_week()
         return {"total": total, "week": week}
 
+    @router.get("/file/{file_id}", include_in_schema=False)
+    async def get_file(file_id: str, auth: None = Auth):
+        f = await bot.get_file(file_id)
+        url = bot.session.api.file_url(f.file_path)
+        return RedirectResponse(url)
+
     @router.post("/questions/{question_id}/reply")
     async def reply_question(
         question_id: int,

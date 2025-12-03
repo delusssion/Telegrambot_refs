@@ -286,12 +286,15 @@ async function loadQuestions() {
     items.forEach((item) => {
       const card = document.createElement("div");
       card.className = "mini-card";
+      const fileBlock = item.file_id
+        ? `<div class="mini-file"><a href="/file/${item.file_id}" target="_blank" rel="noreferrer">Открыть файл</a><br><img src="/file/${item.file_id}" class="thumb" alt=""></div>`
+        : `<div class="mini-file muted">Файл отсутствует</div>`;
       card.innerHTML = `
         <div class="mini-title">#${item.id} · ${item.username || item.user_id || "—"}</div>
         <div class="mini-body">${item.message || "—"}</div>
+        ${fileBlock}
         <div class="mini-meta">
           <span>${item.created_at}</span>
-          <span>${item.file_id || ""}</span>
         </div>
         <div class="mini-actions">
           <button data-id="${item.id}" class="secondary reply-question">Ответить</button>
@@ -352,12 +355,15 @@ async function loadReports() {
     data.items.forEach((item) => {
       const card = document.createElement("div");
       card.className = "mini-card";
+      const fileBlock = item.file_id
+        ? `<div class="mini-file"><a href="/file/${item.file_id}" target="_blank" rel="noreferrer">Открыть файл</a><br><img src="/file/${item.file_id}" class="thumb" alt=""></div>`
+        : `<div class="mini-file muted">Файл отсутствует</div>`;
       card.innerHTML = `
         <div class="mini-title">#${item.id} · ${item.username || item.user_id || "—"}</div>
         <div class="mini-body">${item.message || "—"}</div>
+        ${fileBlock}
         <div class="mini-meta">
           <span>${item.created_at}</span>
-          <span>${item.file_id || ""}</span>
         </div>
         <div class="mini-actions">
           <button data-id="${item.id}" class="secondary reply-report">Ответить</button>
