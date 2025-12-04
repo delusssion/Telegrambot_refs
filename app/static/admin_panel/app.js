@@ -8,6 +8,8 @@ const state = {
   authenticated: false,
   baseUrl: localStorage.getItem(STORAGE_BASE_KEY) || "",
   limit: parseInt(localStorage.getItem(STORAGE_LIMIT_KEY) || "50", 10),
+  dialogs: [],
+  currentDialog: null,
 };
 
 function setBaseUrl(url) {
@@ -207,6 +209,26 @@ function renderPanel() {
           <button type="submit">Отправить</button>
         </form>
       </div>
+
+      <div class="panel-block">
+        <div class="panel-header">
+          <h3>Диалоги</h3>
+          <div class="chips">
+            <button class="secondary" id="load-dialogs">Обновить</button>
+            <select id="dialogs-filter">
+              <option value="">Все</option>
+              <option value="open">Незавершенные</option>
+              <option value="closed">Завершенные</option>
+            </select>
+          </div>
+        </div>
+        <div class="dialogs">
+          <div class="dialogs-list" id="dialogs-list"></div>
+          <div class="dialogs-chat" id="dialogs-chat">
+            <p class="muted">Выберите диалог слева</p>
+          </div>
+        </div>
+      </div>
     </section>
   `;
 
@@ -239,11 +261,14 @@ function renderPanel() {
   document.getElementById("load-reports").addEventListener("click", loadReports);
   document.getElementById("broadcast-form").addEventListener("submit", handleBroadcast);
   document.getElementById("card-form").addEventListener("submit", handleAddCard);
+  document.getElementById("load-dialogs").addEventListener("click", loadDialogs);
+  document.getElementById("dialogs-filter").addEventListener("change", loadDialogs);
 
   loadSubmissions();
   loadActions();
   loadQuestions();
   loadReports();
+  loadDialogs();
 }
 
 async function loadSubmissions() {
@@ -454,6 +479,107 @@ async function handleBroadcast(event) {
     textarea.value = "";
   } catch (err) {
     status.textContent = err.message;
+    showMessage(err.message);
+  }
+}
+
+// Диалоги
+async function loadDialogs() {
+  const listEl = document.getElementById("dialogs-list");
+  if (!listEl) return;
+  const filter = document.getElementById("dialogs-filter").value || "";
+  listEl.innerHTML = "Загрузка...";
+  try {
+    const data = await apiFetch(`/dialogs${filter ? `?status=${filter}` : ""}`);
+    state.dialogs = data.items || [];
+    listEl.innerHTML = "";
+    state.dialogs.forEach((d) => {
+      const item = document.createElement("div");
+      item.className = `dialog-item ${d.status === "closed" ? "closed" : "open"}`;
+      item.dataset.id = d.id;
+      item.innerHTML = `
+        <div class="dialog-title">#${d.id} · ${d.username || d.user_id}</div>
+        <div class="dialog-meta">${d.status === "closed" ? "Завершенный" : "Незавершенный"} • ${d.updated_at}</div>
+        <div class="dialog-preview">${d.last_message || "—"}</div>
+      `;
+      item.addEventListener("click", () => openDialog(d.id));
+      listEl.appendChild(item);
+    });
+    if (!state.dialogs.length) {
+      listEl.innerHTML = `<p class="muted">Нет диалогов</p>`;
+    }
+  } catch (err) {
+    listEl.innerHTML = err.message;
+  }
+}
+
+async function openDialog(id) {
+  const chat = document.getElementById("dialogs-chat");
+  if (!chat) return;
+  chat.innerHTML = "Загрузка...";
+  try {
+    const dialog = await apiFetch(`/dialogs/${id}`);
+    state.currentDialog = dialog;
+    const msgs = dialog.messages || [];
+    const msgsHtml = msgs
+      .map(
+        (m) => `
+        <div class="bubble ${m.direction}">
+          <div class="bubble-meta">${m.created_at}</div>
+          <div class="bubble-text">${m.message || ""}</div>
+          ${m.file_id ? `<div class="mini-file"><img src="/file/${m.file_id}" class="thumb" alt=""></div>` : ""}
+        </div>
+      `
+      )
+      .join("");
+    const controls = `
+      <div class="dialog-actions">
+        <textarea id="dialog-message" rows="2" placeholder="Сообщение пользователю"></textarea>
+        <button id="dialog-send">Отправить</button>
+        <button class="secondary" id="dialog-close">Завершить диалог</button>
+      </div>
+    `;
+    chat.innerHTML = `
+      <div class="dialog-header">
+        <div>
+          <div class="dialog-title">Диалог #${dialog.id}</div>
+          <div class="dialog-meta">${dialog.username || dialog.user_id} • ${dialog.status}</div>
+        </div>
+      </div>
+      <div class="dialog-messages">${msgsHtml || '<p class="muted">Нет сообщений</p>'}</div>
+      ${controls}
+    `;
+    document.getElementById("dialog-send").addEventListener("click", sendDialogMessage);
+    document.getElementById("dialog-close").addEventListener("click", promptCloseDialog);
+  } catch (err) {
+    chat.innerHTML = err.message;
+  }
+}
+
+async function sendDialogMessage() {
+  const input = document.getElementById("dialog-message");
+  if (!input || !state.currentDialog) return;
+  const text = input.value.trim();
+  if (!text) return;
+  try {
+    await apiFetch(`/dialogs/${state.currentDialog.id}/message`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    });
+    input.value = "";
+    await openDialog(state.currentDialog.id);
+    await loadDialogs();
+  } catch (err) {
+    showMessage(err.message);
+  }
+}
+
+async function promptCloseDialog() {
+  if (!state.currentDialog) return;
+  try {
+    await apiFetch(`/dialogs/${state.currentDialog.id}/prompt_close`, { method: "POST" });
+    showMessage("Запрос на завершение отправлен пользователю.");
+  } catch (err) {
     showMessage(err.message);
   }
 }

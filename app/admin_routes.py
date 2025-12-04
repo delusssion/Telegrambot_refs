@@ -1,10 +1,12 @@
 import hashlib
 import hmac
+import io
 from pathlib import Path
 from typing import Optional, Tuple, List
 
 from fastapi import APIRouter, Cookie, Depends, Form, Header, HTTPException, Response, status, Body
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from .config import Settings
 from .db import Database
@@ -103,6 +105,59 @@ def build_admin_router(
         week = await database.count_users_last_week()
         return {"total": total, "week": week}
 
+    @router.get("/dialogs")
+    async def list_dialogs(status: str | None = None, limit: int = 50, auth: None = Auth) -> dict:
+        items = await database.list_dialogs(status=status, limit=limit)
+        return {"items": items}
+
+    @router.get("/dialogs/{dialog_id}")
+    async def get_dialog(dialog_id: int, auth: None = Auth) -> dict:
+        dialog = await database.get_dialog(dialog_id)
+        if not dialog:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dialog not found")
+        return dialog
+
+    @router.post("/dialogs/{dialog_id}/message")
+    async def send_dialog_message(dialog_id: int, text: str = Body(..., embed=True), auth: None = Auth) -> dict:
+        dialog = await database.get_dialog(dialog_id)
+        if not dialog:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dialog not found")
+        await database.add_dialog_message(dialog_id, "admin", message=text)
+        try:
+            await bot.send_message(chat_id=dialog["user_id"], text=text)
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Failed to send: {e}")
+        return {"status": "ok"}
+
+    @router.post("/dialogs/{dialog_id}/prompt_close")
+    async def prompt_close(dialog_id: int, auth: None = Auth) -> dict:
+        dialog = await database.get_dialog(dialog_id)
+        if not dialog:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dialog not found")
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="Да", callback_data=f"dialog_close_yes::{dialog_id}"),
+                    InlineKeyboardButton(text="Нет", callback_data=f"dialog_close_no::{dialog_id}"),
+                ]
+            ]
+        )
+        try:
+            await bot.send_message(chat_id=dialog["user_id"], text="Завершить диалог?", reply_markup=kb)
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Failed to send prompt: {e}")
+        return {"status": "ok"}
+
+    @router.post("/dialogs/{dialog_id}/delete")
+    async def delete_dialog(dialog_id: int, auth: None = Auth) -> dict:
+        dialog = await database.get_dialog(dialog_id)
+        if not dialog:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dialog not found")
+        if dialog["status"] != "closed":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Dialog not closed")
+        await database.delete_dialog(dialog_id)
+        return {"status": "ok"}
+
     @router.get("/file/{file_id}", include_in_schema=False)
     async def get_file(file_id: str, auth: None = Auth):
         try:
@@ -147,6 +202,8 @@ def build_admin_router(
             username=question.get("username"),
             details={"question_id": question_id, "message": message},
         )
+        dialog_id = await database.get_or_create_dialog(user_id, question.get("username"))
+        await database.add_dialog_message(dialog_id, "admin", message=message)
         return {"status": "ok"}
 
     @router.post("/reports/{report_id}/reply")
@@ -171,6 +228,8 @@ def build_admin_router(
             username=report.get("username"),
             details={"report_id": report_id, "message": message},
         )
+        dialog_id = await database.get_or_create_dialog(user_id, report.get("username"))
+        await database.add_dialog_message(dialog_id, "admin", message=message)
         await database.delete_report(report_id)
         return {"status": "ok"}
 

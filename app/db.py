@@ -57,6 +57,25 @@ class Database:
                     file_id TEXT,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 );
+
+                CREATE TABLE IF NOT EXISTS dialogs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    username TEXT,
+                    status TEXT DEFAULT 'open',
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS dialog_messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    dialog_id INTEGER NOT NULL,
+                    direction TEXT NOT NULL, -- 'user' or 'admin'
+                    message TEXT,
+                    file_id TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(dialog_id) REFERENCES dialogs(id) ON DELETE CASCADE
+                );
                 """
             )
             await db.commit()
@@ -387,5 +406,117 @@ class Database:
             )
             row = await cursor.fetchone()
             return row[0] if row and row[0] is not None else 0
+        finally:
+            await db.close()
+
+    async def get_or_create_dialog(self, user_id: int, username: Optional[str]) -> int:
+        db = await self.connect()
+        try:
+            cursor = await db.execute(
+                "SELECT id FROM dialogs WHERE user_id = ? AND status = 'open' ORDER BY updated_at DESC LIMIT 1",
+                (user_id,),
+            )
+            row = await cursor.fetchone()
+            if row:
+                dialog_id = row[0]
+            else:
+                cur = await db.execute(
+                    "INSERT INTO dialogs (user_id, username, status) VALUES (?, ?, 'open')",
+                    (user_id, username),
+                )
+                dialog_id = cur.lastrowid
+                await db.commit()
+            return dialog_id
+        finally:
+            await db.close()
+
+    async def add_dialog_message(self, dialog_id: int, direction: str, message: str = "", file_id: Optional[str] = None) -> int:
+        db = await self.connect()
+        try:
+            cur = await db.execute(
+                "INSERT INTO dialog_messages (dialog_id, direction, message, file_id) VALUES (?, ?, ?, ?)",
+                (dialog_id, direction, message, file_id),
+            )
+            await db.execute("UPDATE dialogs SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", (dialog_id,))
+            await db.commit()
+            return cur.lastrowid
+        finally:
+            await db.close()
+
+    async def list_dialogs(self, status: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+        db = await self.connect()
+        try:
+            query = """
+                SELECT d.id, d.user_id, d.username, d.status, d.created_at, d.updated_at,
+                    (SELECT message FROM dialog_messages dm WHERE dm.dialog_id = d.id ORDER BY dm.created_at DESC LIMIT 1) as last_message
+                FROM dialogs d
+            """
+            params: List[Any] = []
+            if status:
+                query += " WHERE d.status = ?"
+                params.append(status)
+            query += " ORDER BY d.updated_at DESC LIMIT ?"
+            params.append(limit)
+            cursor = await db.execute(query, params)
+            rows = await cursor.fetchall()
+            return [
+                {
+                    "id": r[0],
+                    "user_id": r[1],
+                    "username": r[2],
+                    "status": r[3],
+                    "created_at": r[4],
+                    "updated_at": r[5],
+                    "last_message": r[6],
+                }
+                for r in rows
+            ]
+        finally:
+            await db.close()
+
+    async def get_dialog(self, dialog_id: int) -> Optional[Dict[str, Any]]:
+        db = await self.connect()
+        try:
+            cur = await db.execute(
+                "SELECT id, user_id, username, status, created_at, updated_at FROM dialogs WHERE id = ?",
+                (dialog_id,),
+            )
+            d = await cur.fetchone()
+            if not d:
+                return None
+            cur = await db.execute(
+                "SELECT id, direction, message, file_id, created_at FROM dialog_messages WHERE dialog_id = ? ORDER BY created_at ASC",
+                (dialog_id,),
+            )
+            msgs_rows = await cur.fetchall()
+            messages = [
+                {"id": m[0], "direction": m[1], "message": m[2], "file_id": m[3], "created_at": m[4]}
+                for m in msgs_rows
+            ]
+            return {
+                "id": d[0],
+                "user_id": d[1],
+                "username": d[2],
+                "status": d[3],
+                "created_at": d[4],
+                "updated_at": d[5],
+                "messages": messages,
+            }
+        finally:
+            await db.close()
+
+    async def set_dialog_status(self, dialog_id: int, status: str) -> None:
+        db = await self.connect()
+        try:
+            await db.execute("UPDATE dialogs SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (status, dialog_id))
+            await db.commit()
+        finally:
+            await db.close()
+
+    async def delete_dialog(self, dialog_id: int) -> None:
+        db = await self.connect()
+        try:
+            await db.execute("DELETE FROM dialogs WHERE id = ?", (dialog_id,))
+            await db.commit()
         finally:
             await db.close()

@@ -169,6 +169,12 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         sent = await msg_obj.answer(text, reply_markup=reply_markup)
         await state.update_data(menu_msg_id=sent.message_id)
 
+    async def _append_dialog_message(user, text: str, file_id: Optional[str] = None):
+        if not user:
+            return
+        dialog_id = await database.get_or_create_dialog(user.id, user.username)
+        await database.add_dialog_message(dialog_id, "user", message=text or "", file_id=file_id)
+
     def _instruction_text(bank_name: str, link: str, custom: Optional[str] = None) -> str:
         if custom == "tbank":
             return (
@@ -621,6 +627,20 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         await clear_state_keep_age(state)
         await show_tasks_or_main(call, state)
 
+    @dp.callback_query(F.data.startswith("dialog_close_yes::"))
+    async def handle_dialog_close_yes(call: CallbackQuery) -> None:
+        dialog_id = int(call.data.split("::", 1)[1])
+        await database.set_dialog_status(dialog_id, "closed")
+        await call.message.edit_text("Диалог закрыт. Спасибо!")
+        await call.answer("Закрыто")
+
+    @dp.callback_query(F.data.startswith("dialog_close_no::"))
+    async def handle_dialog_close_no(call: CallbackQuery) -> None:
+        dialog_id = int(call.data.split("::", 1)[1])
+        await database.set_dialog_status(dialog_id, "open")
+        await call.message.edit_text("Диалог остаётся открытым, продолжаем общение.")
+        await call.answer("Оставлен открытым")
+
     @dp.callback_query(F.data == "back_to_banks")
     async def handle_back_to_banks(call: CallbackQuery, state: FSMContext) -> None:
         await _show_banks_by_age(state, call)
@@ -730,7 +750,7 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
             inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="go_main")]]
         )
         await message.answer(
-            "⭐ Отзывы: скоро добавим витрину отзывов. Пока можешь написать вопрос в поддержку.",
+            "<blockquote>🔥🔥 Вот наш единственный канал с отзывами - @alfasbermoneybot_rep все настоящие отзывы только там!</blockquote>",
             reply_markup=back_kb,
         )
 
@@ -785,7 +805,7 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
             inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="go_main")]]
         )
         await call.message.answer(
-            "⭐ Отзывы: скоро добавим витрину отзывов. Пока можешь написать вопрос в поддержку.",
+            "<blockquote>🔥🔥 Вот наш единственный канал с отзывами - @alfasbermoneybot_rep все настоящие отзывы только там!</blockquote>",
             reply_markup=back_kb,
         )
         await call.answer()
@@ -877,6 +897,7 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
             message=text or "",
             file_id=file_id,
         )
+        await _append_dialog_message(message.from_user, text or "", file_id=file_id)
         await database.add_action(
             action="question_submitted",
             user_id=message.from_user.id if message.from_user else None,
