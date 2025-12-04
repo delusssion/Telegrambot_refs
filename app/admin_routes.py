@@ -106,7 +106,7 @@ def build_admin_router(
         return {"total": total, "week": week}
 
     @router.get("/dialogs")
-    async def list_dialogs(status: str | None = None, limit: int = 50, auth: None = Auth) -> dict:
+    async def list_dialogs(status: Optional[str] = None, limit: int = 50, auth: None = Auth) -> dict:
         items = await database.list_dialogs(status=status, limit=limit)
         return {"items": items}
 
