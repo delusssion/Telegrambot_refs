@@ -94,7 +94,7 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
     )
     start_support_keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="✉️ Написать сообщение", callback_data="start_support")],
+            [InlineKeyboardButton(text="🚀 Начать диалог", callback_data="start_support")],
             [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_support")],
         ]
     )
@@ -585,14 +585,24 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
             username=call.from_user.username if call.from_user else None,
             details={},
         )
-        await state.set_state(SupportForm.question)
-        await _send_menu(call, state, "Напиши свой вопрос или отправь файл/скрин. После отправки вопрос будет сохранен для админов.", reply_markup=cancel_support_keyboard)
+        await clear_state_keep_age(state)
+        await _send_menu(
+            call,
+            state,
+            "Хотите начать диалог с администрацией?",
+            reply_markup=start_support_keyboard,
+        )
         await call.answer()
 
     @dp.callback_query(F.data == "start_support")
     async def handle_start_support(call: CallbackQuery, state: FSMContext) -> None:
         await state.set_state(SupportForm.question)
-        await _send_menu(call, state, "Напиши свой вопрос или отправь файл/скрин. Можно отменить кнопкой ниже.", reply_markup=cancel_support_keyboard)
+        await _send_menu(
+            call,
+            state,
+            "Диалог начат. Вы можете задать любой интересующий вас вопрос администрации и они вам в скором времени ответят!",
+            reply_markup=cancel_support_keyboard,
+        )
         await call.answer()
 
     @dp.callback_query(F.data == "start_report_message")
@@ -764,7 +774,7 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         )
         await clear_state_keep_age(state)
         await call.message.answer(
-            "Техподдержка. Нажми «✉️ Написать сообщение», затем отправь текст или файл.",
+            "Хотите начать диалог с администрацией?",
             reply_markup=start_support_keyboard,
         )
         await call.answer()
@@ -779,12 +789,7 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         )
         await clear_state_keep_age(state)
         await call.message.answer(
-            "👉Если УЖЕ получил карту\n"
-            "👉Нажмите на кнопку ниже и отправьте\n"
-            "_________________________________\n"
-            "1️⃣Скриншот заказа карты с сайта\n"
-            "2️⃣Название банка карты, который заказали\n"
-            "3️⃣Номер телефона на который заказали карту, для выплаты",
+            "При получении карты вы можете подтвердить это и следовать дальнейшей инструкции.",
             reply_markup=start_report_keyboard,
         )
         await call.answer()
@@ -918,7 +923,7 @@ def setup_bot(settings: Settings, database: Database) -> Dispatcher:
         )
         await clear_state_keep_age(state)
         await message.answer(
-            "Сообщи о получении карты. Нажми «✉️ Написать сообщение», затем отправь текст или скрин.",
+            "При получении карты вы можете подтвердить это и следовать дальнейшей инструкции.",
             reply_markup=start_report_keyboard,
         )
 
